@@ -57,5 +57,6 @@ USER fastapi
 
 EXPOSE 8000
 
-# Run with Gunicorn backed by Uvicorn workers for production stability
-CMD ["gunicorn", "main:app", "--workers", "4", "--worker-class", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000"]
+# Run with Gunicorn backed by Uvicorn workers, dynamically binding to $PORT (Render) or 8000
+CMD ["sh", "-c", "exec gunicorn main:app --workers ${WEB_CONCURRENCY:-1} --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:${PORT:-8000}"]
+
