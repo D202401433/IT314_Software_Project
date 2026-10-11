@@ -229,11 +229,16 @@ jobs:
 
       - name: Push verified image to GHCR (main only)
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        env:
+          DOCKER_TAGS: ${{ steps.meta.outputs.tags }}
         run: |
-          for tag in ${{ steps.meta.outputs.tags }}; do
-            docker tag ${{ matrix.image_name }}:latest $tag
-            docker push $tag
+          echo "$DOCKER_TAGS" | while IFS= read -r tag; do
+            if [ -n "$tag" ]; then
+              docker tag ${{ matrix.image_name }}:latest "$tag"
+              docker push "$tag"
+            fi
           done
+
 
   # ============================================================================
   # 6. CI Pipeline Gatekeeper (Blocking Status Check)
