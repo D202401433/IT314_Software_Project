@@ -157,90 +157,14 @@ jobs:
           else
             echo "No test suite found in backend/tests/ — running smoke test"
             python -c "from main import app; print('FastAPI app imports successfully')"
-          fi
-
+          fi  # ============================================================================
+  # 5. Container Build, Trivy Security Scan & GHCR Publication
+  #    Optimized single-pass build: builds image once, scans with Trivy (cached DB),
+  #    and pushes to GHCR directly on 'main' push without rebuilding!
   # ============================================================================
-  # 5. Container Build & Security Scan (Parallel Matrix with Docker Buildx & GHA Cache)
-  # ============================================================================
-  container-security:
-    name: Build & Security / Container Scan (${{ matrix.name }})
+  container-build-and-security:
+    name: Build & Security / Container (${{ matrix.name }})
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: frontend
-            context: ./frontend
-            file: ./frontend/Dockerfile
-            image: drch_frontend:latest
-          - name: backend
-            context: ./backend
-            file: ./backend/Dockerfile
-            image: drch_backend:latest
-          - name: ai-workers
-            context: ./ai-workers
-            file: ./ai-workers/Dockerfile
-            image: drch_ai_workers:latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build container image with Buildx GHA cache
-        uses: docker/build-push-action@v6
-        with:
-          context: ${{ matrix.context }}
-          file: ${{ matrix.file }}
-          load: true
-          tags: ${{ matrix.image }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Run Trivy vulnerability scan (${{ matrix.name }})
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: 'image'
-          image-ref: ${{ matrix.image }}
-          severity: 'CRITICAL,HIGH'
-          exit-code: '0'
-
-  # ============================================================================
-  # 6. CI Pipeline Gatekeeper (Blocking Status Check)
-  # ============================================================================
-  ci-gatekeeper:
-    name: Pipeline Status / Quality Gate
-    runs-on: ubuntu-latest
-    needs:
-      - frontend-check
-      - python-check
-      - database-schema-validation
-      - backend-tests
-      - container-security
-    if: always()
-    steps:
-      - name: Evaluate pipeline execution status
-        run: |
-          if [ "${{ needs.frontend-check.result }}" != "success" ] || \
-             [ "${{ needs.python-check.result }}" != "success" ] || \
-             [ "${{ needs.database-schema-validation.result }}" != "success" ] || \
-             [ "${{ needs.backend-tests.result }}" != "success" ] || \
-             [ "${{ needs.container-security.result }}" != "success" ]; then
-            echo "Pipeline check failed: one or more jobs did not succeed."
-            exit 1
-          fi
-          echo "Pipeline check passed: all validation and security jobs succeeded."
-
-  # ============================================================================
-  # 7. Continuous Deployment (CD): Publish to GitHub Container Registry (GHCR)
-  #    Executes only on pushes to main after all quality gates pass
-  # ============================================================================
-  publish-images:
-    name: Continuous Deployment / Publish Images (GHCR)
-    runs-on: ubuntu-latest
-    needs: ci-gatekeeper
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     permissions:
       contents: read
       packages: write
@@ -268,6 +192,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to GitHub Container Registry (GHCR)
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -283,24 +208,66 @@ jobs:
             type=raw,value=latest
             type=sha,format=short,prefix=sha-
 
-      - name: Build and push container image to GHCR
+      - name: Build and load image for local security scan
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.file }}
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          load: true
+          tags: ${{ matrix.image_name }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Run Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'image'
+          image-ref: ${{ matrix.image_name }}:latest
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'
+          cache: true
+
+      - name: Push verified image to GHCR (main only)
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          for tag in ${{ steps.meta.outputs.tags }}; do
+            docker tag ${{ matrix.image_name }}:latest $tag
+            docker push $tag
+          done
+
   # ============================================================================
-  # 8. Continuous Deployment (CD): Deploy to Production Environment
+  # 6. CI Pipeline Gatekeeper (Blocking Status Check)
+  # ============================================================================
+  ci-gatekeeper:
+    name: Pipeline Status / Quality Gate
+    runs-on: ubuntu-latest
+    needs:
+      - frontend-check
+      - python-check
+      - database-schema-validation
+      - backend-tests
+      - container-build-and-security
+    if: always()
+    steps:
+      - name: Evaluate pipeline execution status
+        run: |
+          if [ "${{ needs.frontend-check.result }}" != "success" ] || \
+             [ "${{ needs.python-check.result }}" != "success" ] || \
+             [ "${{ needs.database-schema-validation.result }}" != "success" ] || \
+             [ "${{ needs.backend-tests.result }}" != "success" ] || \
+             [ "${{ needs.container-build-and-security.result }}" != "success" ]; then
+            echo "Pipeline check failed: one or more jobs did not succeed."
+            exit 1
+          fi
+          echo "Pipeline check passed: all validation and security jobs succeeded."
+
+  # ============================================================================
+  # 7. Continuous Deployment (CD): Production Verification
   # ============================================================================
   deploy:
     name: Continuous Deployment / Deploy to Production
     runs-on: ubuntu-latest
-    needs: publish-images
+    needs: ci-gatekeeper
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     environment:
       name: production
@@ -322,4 +289,5 @@ jobs:
             exit 1
           fi
           echo "Production deployment readiness verification complete."
+
 
