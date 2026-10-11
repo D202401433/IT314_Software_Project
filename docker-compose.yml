@@ -15,8 +15,8 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./backend/drch_schema.sql:/docker-entrypoint-initdb.d/01_drch_schema.sql
-      - ./backend/seed_data.sql:/docker-entrypoint-initdb.d/02_seed_data.sql
+      - ./backend/db/migrations/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - ./backend/db/seeds/seed_data.sql:/docker-entrypoint-initdb.d/02_seed_data.sql
     restart: unless-stopped
 
   redis:
