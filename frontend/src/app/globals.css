@@ -22,5 +22,74 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+}
+
+/* ============ GPU ACCELERATED SMOOTH MAP ZOOM & PAN ============ */
+.leaflet-pane,
+.leaflet-tile-container,
+.leaflet-map-pane {
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+.leaflet-zoom-anim .leaflet-zoom-animated {
+  transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+  will-change: transform;
+}
+
+.leaflet-tile {
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+/* ============ SCALE BAR & MINIMAP TWEAKS ============ */
+.leaflet-control-scale-line {
+  background: rgba(255, 255, 255, 0.88) !important;
+  color: #111 !important;
+  font-weight: 600 !important;
+  font-size: 11px !important;
+  border-color: #14639e !important;
+  padding: 2px 6px !important;
+  border-radius: 3px !important;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.3) !important;
+}
+
+.leaflet-control-minimap {
+  border: 2px solid #ffffff !important;
+  border-radius: 6px !important;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.45) !important;
+  overflow: hidden !important;
+  background: #111 !important;
+}
+
+/* ============ HIDE ALL WATERMARKS & ATTRIBUTION ============ */
+.leaflet-control-attribution {
+  display: none !important;
+}
+
+/* ============ ENHANCED LABEL VISIBILITY ============ */
+.place-labels-layer {
+  filter: contrast(1.15) brightness(1.05) drop-shadow(0px 1px 2px rgba(0, 0, 0, 0.8));
+  z-index: 600 !important;
+}
+
+
+/* Leaflet Popup Styling */
+.leaflet-popup-content-wrapper {
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(8px);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  font-family: inherit;
+  padding: 4px;
+}
+
+.leaflet-popup-tip {
+  background: rgba(255, 255, 255, 0.96);
 }
