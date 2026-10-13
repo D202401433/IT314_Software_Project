@@ -39,7 +39,6 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   const activeCriticalIncidents = incidents.filter(
     (inc) => inc.severity === "CRITICAL" && inc.lifecycleStatus !== "RESOLVED"
   );
-  const lowStockResources = resources.filter((r) => r.availableStock <= r.criticalThreshold);
 
   return (
     <div className="fixed bottom-4 left-4 z-[900] max-w-lg w-full animate-fadeIn font-sans">

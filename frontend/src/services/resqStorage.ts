@@ -10,9 +10,6 @@ import {
   AuditLogRecord,
   UserProfile,
   UserRole,
-  DisasterCategory,
-  IncidentSeverity,
-  IncidentLifecycleStatus,
 } from "../types/resq";
 
 const STORAGE_KEYS = {

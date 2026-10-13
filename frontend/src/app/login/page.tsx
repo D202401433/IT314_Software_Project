@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ResQProvider, useResQ } from "../../context/ResQContext";
-import { PortalRoleCategory, UserProfile, UserRole } from "../../types/resq";
+import { PortalRoleCategory, UserProfile } from "../../types/resq";
 import { DEMO_USERS } from "../../services/resqStorage";
 
 function LoginPageContent() {

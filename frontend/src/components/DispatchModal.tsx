@@ -198,7 +198,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
 
             <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
               {sortedResponders.map((unit) => {
-                const { score, reason } = getSuitabilityScore(unit);
+                const { score, reason: _reason } = getSuitabilityScore(unit);
                 const isSelected = selectedUnitId === unit.id;
                 const isAvailable = unit.status === "AVAILABLE";
 
@@ -248,7 +248,7 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
                         {score > 50 ? "⭐️ High Match" : "Standard"}
                       </div>
                       <div className="text-[10px] text-slate-400 font-mono">
-                        ~{Math.round(10 + Math.random() * 8)} min ETA
+                        ~{10 + (unit.callsign.length % 7)} min ETA
                       </div>
                     </div>
                   </div>

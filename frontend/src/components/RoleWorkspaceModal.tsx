@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useResQ } from "../context/ResQContext";
-import { UserRole, IncidentRecord, CitizenReportRecord, InfrastructureRecord } from "../types/resq";
+import { UserRole, IncidentRecord } from "../types/resq";
 import { DEMO_USERS } from "../services/resqStorage";
 
 interface RoleWorkspaceModalProps {
@@ -39,10 +39,8 @@ export const RoleWorkspaceModal: React.FC<RoleWorkspaceModalProps> = ({
     setMapFocusTarget,
   } = useResQ();
 
-  const [activeTab, setActiveTab] = useState<string>("default");
   const [reportFilter, setReportFilter] = useState<string>("ALL");
   const [allocationAmount, setAllocationAmount] = useState<Record<string, number>>({});
-  const [selectedIncidentForAlloc, setSelectedIncidentForAlloc] = useState<string>("");
   const [feedback, setFeedback] = useState<string | null>(null);
 
   if (!isOpen) return null;
@@ -350,7 +348,7 @@ export const RoleWorkspaceModal: React.FC<RoleWorkspaceModalProps> = ({
                       </div>
 
                       <p className="text-[11px] text-slate-300 bg-slate-950/60 p-2 rounded border border-slate-800/80">
-                        "{rep.description}"
+                        &quot;{rep.description}&quot;
                       </p>
 
                       {/* Dispatcher Actions */}

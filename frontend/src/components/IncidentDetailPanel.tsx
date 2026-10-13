@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useResQ } from "../context/ResQContext";
-import { IncidentRecord, IncidentSeverity, IncidentLifecycleStatus } from "../types/resq";
+import { IncidentRecord, IncidentSeverity } from "../types/resq";
 
 interface Props {
   incident: IncidentRecord | null;
@@ -12,9 +12,7 @@ interface Props {
 
 export default function IncidentDetailPanel({ incident, onClose, onOpenDispatch }: Props) {
   const {
-    currentUser,
     updateIncidentStatus,
-    updateIncidentSeverity,
     acceptAITriage,
     overrideAITriage,
     responders,

@@ -14,7 +14,6 @@ import {
   IncidentMessageRecord,
   SystemAlertRecord,
   AuditLogRecord,
-  DisasterCategory,
   IncidentSeverity,
   IncidentLifecycleStatus,
 } from "../types/resq";
@@ -130,7 +129,10 @@ export function ResQProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    refreshState();
+    // Synchronize client storage after hydration
+    const timer = setTimeout(() => {
+      refreshState();
+    }, 0);
 
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
@@ -139,6 +141,7 @@ export function ResQProvider({ children }: { children: React.ReactNode }) {
     window.addEventListener("offline", handleOffline);
 
     return () => {
+      clearTimeout(timer);
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };

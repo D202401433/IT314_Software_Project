@@ -14,7 +14,7 @@ import { GeneralPublicDashboardView } from "../components/role-views/GeneralPubl
 import { CitizenDashboardView } from "../components/role-views/CitizenDashboardView";
 import { AdminDashboardView } from "../components/role-views/AdminDashboardView";
 import { ServiceProviderDashboardView } from "../components/role-views/ServiceProviderDashboardView";
-import { IncidentRecord, CitizenReportRecord, PortalRoleCategory } from "../types/resq";
+import { IncidentRecord, PortalRoleCategory } from "../types/resq";
 
 // Basemap layer configurations with maxNativeZoom to prevent labels disappearing at deep zoom
 const TILE_LAYERS = {
@@ -74,7 +74,6 @@ const STREET_LABELS_OVERLAY = "https://mt1.google.com/vt/lyrs=h&x={x}&y={y}&z={z
 
 function ResQGeoPortalInner() {
   const {
-    activeRole,
     currentUser,
     roleCategory,
     isAuthenticated,
@@ -86,7 +85,6 @@ function ResQGeoPortalInner() {
     responders,
     dispatches,
     infrastructure,
-    alerts,
     unreadAlertCount,
     mapFocusTarget,
     setMapFocusTarget,
@@ -131,7 +129,7 @@ function ResQGeoPortalInner() {
   // Auth & Role Modals visibility
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<"login" | "signup">("login");
-  const [authModalCategory, setAuthModalCategory] = useState<PortalRoleCategory>("user");
+  const [authModalCategory] = useState<PortalRoleCategory>("user");
   const [showRoleMenu, setShowRoleMenu] = useState(false);
 
   // Modals & Panels visibility
@@ -151,7 +149,6 @@ function ResQGeoPortalInner() {
   useEffect(() => {
     const fadeTimer = setTimeout(() => setSplashFading(true), 2800);
     return () => clearTimeout(fadeTimer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Helper to load Leaflet from CDN

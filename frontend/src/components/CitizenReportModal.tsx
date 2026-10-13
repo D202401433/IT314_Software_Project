@@ -17,8 +17,8 @@ export default function CitizenReportModal({ isOpen, onClose, pickedCoords }: Pr
   const [category, setCategory] = useState<DisasterCategory>("Flood / Urban Flood");
   const [description, setDescription] = useState("");
   const [locationName, setLocationName] = useState(pickedCoords?.name || "Wayanad, Kerala");
-  const [lat, setLat] = useState(pickedCoords?.lat || 11.5542);
-  const [lon, setLon] = useState(pickedCoords?.lon || 76.1264);
+  const [lat] = useState(pickedCoords?.lat || 11.5542);
+  const [lon] = useState(pickedCoords?.lon || 76.1264);
   const [affectedCount, setAffectedCount] = useState(5);
   const [selectedNeeds, setSelectedNeeds] = useState<string[]>(["Rescue Boats"]);
   const [reporterName, setReporterName] = useState("");

@@ -2,7 +2,6 @@ import {
   DisasterCategory,
   IncidentSeverity,
   AITriageRecommendation,
-  CitizenReportRecord,
   ReportSource,
 } from "../types/resq";
 
