@@ -64,7 +64,7 @@ async def lifespan(app: FastAPI):
         raise FileNotFoundError(
             f"Model file not found at {CKPT_PATH}. Copy best_model.pt into that folder."
         )
-    ckpt = torch.load(CKPT_PATH, map_location=device)
+    ckpt = torch.load(CKPT_PATH, map_location=device, weights_only=True)  # nosec B614
     classes = ckpt["classes"]
     img_size = ckpt["img_size"]
 
