@@ -1,45 +1,88 @@
+"""Reusable model, dataset, preprocessing, and evaluation utilities.
+
+This module does not train a model when imported. Training is intentionally
+kept out of this file; use the existing checkpoint with check_model.ipynb.
 """
-FastAPI service for the disaster type classifier.
 
-Install:
-    pip install fastapi "uvicorn[standard]" python-multipart torch torchvision timm pillow
-
-Run (from the folder containing this file and best_model.pt):
-    uvicorn app:app --reload
-
-Then open:  http://127.0.0.1:8000/docs
-"""
-import io
-from contextlib import asynccontextmanager
+import csv
+import os
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
 import timm
 import torch
-import torch.nn as nn
-from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.middleware.cors import CORSMiddleware
-from PIL import Image, ImageFile, UnidentifiedImageError
+from PIL import Image, ImageFile
+from sklearn.metrics import confusion_matrix, f1_score
+from torch import nn
+from torch.utils.data import Dataset
 from torchvision import transforms
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
-# ----------------------------- CONFIG ---------------------------------------
-CKPT_PATH = Path(__file__).resolve().parent / "best_model.pt"   # next to app.py
-REVIEW_THRESHOLD = 0.60          # below this confidence -> needs_review = True
-# Stricter threshold for the weakest classes in testing (other_disaster F1 0.59, hurricane 0.72).
-# Tune these on the dev set.
-CLASS_THRESHOLDS = {"other_disaster": 0.70, "hurricane": 0.70}
-MAX_FILE_MB = 10
-ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp", "image/bmp"}
-# ----------------------------------------------------------------------------
+ROOT = Path(
+    os.environ.get(
+        "DISASTER_DATA_ROOT",
+        r"D:\Study\Python\Project\New folder\data_disaster_types\data_disaster_types",
+    )
+)
+# Dataset TSV paths are part of the public module API used by check_model.ipynb.
+TRAIN_TSV = ROOT / "consolidated_disaster_types_train_final.tsv"
+DEV_TSV = ROOT / "consolidated_disaster_types_dev_final.tsv"
+TEST_TSV = ROOT / "consolidated_disaster_types_test_final.tsv"
+
+IMG_SIZE = 224
+MODEL_NAME = "convnext_tiny"
+OUT_DIR = Path(os.environ.get("DISASTER_OUT_DIR", "outputs"))
+
+
+def load_split(tsv_path, name="data"):
+    """Load a TSV split and drop rows whose image files are missing."""
+    df = pd.read_csv(tsv_path, sep="\t", quoting=csv.QUOTE_NONE, dtype=str)
+    df = df[["image_path", "class_label"]].dropna().copy()
+    df["class_label"] = df["class_label"].str.strip()
+    df["full_path"] = df["image_path"].apply(
+        lambda path: str(
+            ROOT / path.strip().replace("data/aidr_disaster_types/", "data/", 1)
+        )
+    )
+    exists = df["full_path"].apply(os.path.exists)
+    missing = int((~exists).sum())
+    if missing:
+        print(f"[{name}] dropping {missing} rows with missing image files")
+    df = df[exists].reset_index(drop=True)
+    print(f"[{name}] {len(df)} images")
+    return df
+
+
+class DisasterDataset(Dataset):
+    """Image dataset used by the evaluation notebook."""
+
+    def __init__(self, df, class_to_idx, transform):
+        self.paths = df["full_path"].tolist()
+        self.labels = [class_to_idx[label] for label in df["class_label"]]
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.paths)
+
+    def __getitem__(self, idx):
+        try:
+            with Image.open(self.paths[idx]) as image:
+                image = image.convert("RGB")
+        except (OSError, ValueError):
+            image = Image.new("RGB", (IMG_SIZE, IMG_SIZE), (128, 128, 128))
+        return self.transform(image), self.labels[idx]
 
 
 class DisasterClassifier(nn.Module):
-    """Must match the architecture used in training."""
+    """Backbone and classification head; architecture must match the checkpoint."""
 
     def __init__(self, model_name, num_classes):
         super().__init__()
-        self.backbone = timm.create_model(model_name, pretrained=False, num_classes=0)
+        self.backbone = timm.create_model(
+            model_name, pretrained=False, num_classes=0
+        )
         self.head = nn.Sequential(
             nn.Dropout(0.3),
             nn.Linear(self.backbone.num_features, num_classes),
@@ -49,88 +92,82 @@ class DisasterClassifier(nn.Module):
         return self.head(self.backbone(x))
 
 
-# Loaded once at startup and reused for every request
-STATE = {}
+def build_transforms():
+    """Return the training augmentation and deterministic evaluation transforms."""
+    mean = (0.485, 0.456, 0.406)
+    std = (0.229, 0.224, 0.225)
+    train_tf = transforms.Compose(
+        [
+            transforms.RandomResizedCrop(IMG_SIZE, scale=(0.6, 1.0)),
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomApply(
+                [transforms.GaussianBlur(5, sigma=(0.1, 2.0))], p=0.3
+            ),
+            transforms.ColorJitter(0.3, 0.3, 0.3, 0.05),
+            transforms.RandomRotation(10),
+            transforms.ToTensor(),
+            transforms.Normalize(mean, std),
+        ]
+    )
+    eval_tf = transforms.Compose(
+        [
+            transforms.Resize(int(IMG_SIZE * 1.14)),
+            transforms.CenterCrop(IMG_SIZE),
+            transforms.ToTensor(),
+            transforms.Normalize(mean, std),
+        ]
+    )
+    return train_tf, eval_tf
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    if not CKPT_PATH.exists():
-        raise FileNotFoundError(
-            f"Model file not found at {CKPT_PATH}. Copy best_model.pt into that folder."
-        )
-    ckpt = torch.load(CKPT_PATH, map_location=device)
-    classes = ckpt["classes"]
-    img_size = ckpt["img_size"]
-
-    model = DisasterClassifier(ckpt["model_name"], len(classes)).to(device)
-    model.load_state_dict(ckpt["model"])
+@torch.no_grad()
+def evaluate(model, loader, device, criterion=None):
+    """Return loss, accuracy, macro-F1, true labels, and predicted labels."""
     model.eval()
-
-    STATE["device"] = device
-    STATE["model"] = model
-    STATE["classes"] = classes
-    STATE["tf"] = transforms.Compose([
-        transforms.Resize(int(img_size * 1.14)),
-        transforms.CenterCrop(img_size),
-        transforms.ToTensor(),
-        transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
-    ])
-    print(f"Model loaded: {ckpt['model_name']} | classes: {classes} | device: {device}")
-    yield
-    STATE.clear()
-
-
-app = FastAPI(title="Disaster Image Classifier", version="1.0", lifespan=lifespan)
-
-# Allow your React/Vue frontend to call this API (tighten the origins for production)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+    all_preds, all_labels = [], []
+    total_loss = 0.0
+    for images, labels in loader:
+        images, labels = images.to(device), labels.to(device)
+        with torch.autocast(device_type=device.type, enabled=device.type == "cuda"):
+            logits = model(images)
+            if criterion is not None:
+                total_loss += criterion(logits, labels).item() * images.size(0)
+        all_preds.extend(logits.argmax(1).cpu().tolist())
+        all_labels.extend(labels.cpu().tolist())
+    macro_f1 = f1_score(all_labels, all_preds, average="macro")
+    accuracy = float(np.mean(np.array(all_preds) == np.array(all_labels)))
+    average_loss = total_loss / len(loader.dataset) if len(loader.dataset) else 0.0
+    return average_loss, accuracy, macro_f1, all_labels, all_preds
 
 
-@app.get("/health")
-def health():
-    return {"status": "ok", "classes": STATE.get("classes", [])}
+def save_confusion_matrix(labels, preds, classes, path):
+    """Save a row-normalized confusion matrix image."""
+    import matplotlib
 
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
 
-# A plain `def` endpoint runs in a worker thread, so model inference
-# does not block other requests.
-@app.post("/predict")
-def predict(file: UploadFile = File(..., description="Disaster image (jpg/png/webp)")):
-    if file.content_type not in ALLOWED_TYPES:
-        raise HTTPException(415, f"Unsupported file type '{file.content_type}'. Use jpg, png or webp.")
-
-    data = file.file.read()
-    if len(data) > MAX_FILE_MB * 1024 * 1024:
-        raise HTTPException(413, f"File too large (max {MAX_FILE_MB} MB).")
-
-    try:
-        img = Image.open(io.BytesIO(data)).convert("RGB")
-    except (UnidentifiedImageError, OSError):
-        raise HTTPException(400, "Could not read this file as an image.")
-
-    x = STATE["tf"](img).unsqueeze(0).to(STATE["device"])
-    with torch.no_grad():
-        probs = torch.softmax(STATE["model"](x), dim=1)[0].cpu()
-
-    classes = STATE["classes"]
-    top_p, top_i = probs.topk(min(3, len(classes)))
-    top3 = [{"label": classes[i], "confidence": round(p.item(), 4)} for p, i in zip(top_p, top_i)]
-
-    label, confidence = top3[0]["label"], top3[0]["confidence"]
-    threshold = CLASS_THRESHOLDS.get(label, REVIEW_THRESHOLD)
-
-    return {
-        "filename": file.filename,
-        "prediction": label,
-        "confidence": confidence,
-        "top3": top3,
-        "all_probabilities": {c: round(p.item(), 4) for c, p in zip(classes, probs)},
-        "needs_review": confidence < threshold,
-        "review_threshold_used": threshold,
-    }
+    matrix = confusion_matrix(labels, preds, normalize="true")
+    fig, ax = plt.subplots(figsize=(7, 6))
+    image = ax.imshow(matrix, cmap="Blues")
+    ax.set_xticks(range(len(classes)))
+    ax.set_yticks(range(len(classes)))
+    ax.set_xticklabels(classes, rotation=45, ha="right")
+    ax.set_yticklabels(classes)
+    for row in range(len(classes)):
+        for col in range(len(classes)):
+            ax.text(
+                col,
+                row,
+                f"{matrix[row, col]:.2f}",
+                ha="center",
+                va="center",
+                color="white" if matrix[row, col] > 0.5 else "black",
+                fontsize=8,
+            )
+    ax.set_xlabel("Predicted")
+    ax.set_ylabel("True")
+    fig.colorbar(image)
+    fig.tight_layout()
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
