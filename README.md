@@ -335,20 +335,59 @@ cp .env.example .env
 # Edit .env with your LLM API keys, DB credentials, and mock ports
 ```
 
-### 3. Launch the Entire Platform (Docker)
-Since the project is fully containerized, you can launch the Next.js frontend, FastAPI backend, Python AI workers, and all core infrastructure (PostgreSQL, Redis, RabbitMQ) with a single command:
+### 3. Database Initialization (Migrations & Seed Data)
+When setting up locally or connecting to a remote PostgreSQL/Neon database, apply the schema migration and baseline seed data:
+
+```bash
+# Using psql with your DATABASE_URL:
+psql "$DATABASE_URL" -f backend/db/migrations/01_schema.sql
+psql "$DATABASE_URL" -f backend/db/seeds/seed_data.sql
+```
+*Note: In local Docker Compose, `01_schema.sql` is automatically mounted into `/docker-entrypoint-initdb.d/`.*
+
+### 4. Launch the Entire Platform (Local Docker)
+Since the project is containerized, you can launch the Next.js frontend, FastAPI backend, Python AI workers, and all local infrastructure (PostgreSQL, Redis, RabbitMQ) with a single command:
 
 ```bash
 docker compose up --build
 ```
 
-### 4. Access the Applications
-Once the containers are running, you can access the different parts of the system:
-- **Frontend (Web Client & Portals):** `http://localhost:3000`
+### 5. Access the Applications & Health Endpoints
+Once the services are running, access:
+- **Frontend (Web Client & Tactical Portals):** `http://localhost:3000`
 - **Backend API Docs (Swagger UI):** `http://localhost:8000/docs`
-- **RabbitMQ Admin UI:** `http://localhost:15672` (guest/guest)
+- **System Health Diagnostics:**
+  - Liveness: `http://localhost:8000/health`
+  - Readiness & Service Probe (DB, Redis, RabbitMQ): `http://localhost:8000/health/ready`
+- **RabbitMQ Management Dashboard:** `http://localhost:15672` (guest/guest)
 
-Open `http://localhost:3000` to access the DRCH platform.
+---
+
+## 🌐 Production Deployment Architecture
+
+The platform supports both multi-cloud serverless deployment and fully containerized production orchestration:
+
+### Option A: Cloud / Managed Services (Recommended)
+- **Frontend:** Hosted on **Vercel** (`frontend/`) with change-detection filtering via `vercel.json` and `vercel-ignored-build.sh`.
+- **Backend API:** Hosted on **Render** using `render.yaml` with auto-deployments, containerized runtime, and health check probes at `/health`.
+- **Database:** Hosted on **Neon Serverless PostgreSQL** with PostGIS enabled.
+- **Cache & Message Broker:** **Upstash Redis** and **CloudAMQP** (RabbitMQ).
+
+### Option B: Self-Hosted Production Docker Compose
+To deploy the full stack against external cloud databases/queues using production containers:
+
+```bash
+docker compose -f docker-compose.prod.yml up --build -d
+```
+
+### 🔄 CI/CD Automation & Security Gates
+Every commit and pull request against `main` runs through the automated pipeline ([`.github/workflows/ci_cd.yml`](.github/workflows/ci_cd.yml)):
+1. **Frontend Check:** Node.js 20 & ESLint.
+2. **Python Check:** Ruff linter + Bandit static security analysis (SAST).
+3. **Database Integrity:** PostgreSQL 16 + PostGIS schema validation and cryptographic audit chain hash verification.
+4. **Backend Tests:** Pytest unit test execution.
+5. **Security & Artifacts:** Single-pass Docker builds scanned by **Aqua Security Trivy** (blocking critical vulnerabilities) and published to **GitHub Container Registry (GHCR)**.
+6. **CD Gate:** Automated deployment readiness verification.
 
 ---
 
