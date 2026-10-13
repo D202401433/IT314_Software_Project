@@ -1,0 +1,27 @@
+# Python Bytecode & Cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual Environment
+.venv/
+venv/
+env/
+
+# Environment Variables
+.env
+.env.*
+!.env.example
+
+# Database & SQLite files
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs & Testing
+*.log
+.pytest_cache/
+.coverage
+htmlcov/

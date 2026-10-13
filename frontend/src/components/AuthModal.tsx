@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { useResQ } from "../context/ResQContext";
 import { PortalRoleCategory, UserProfile, UserRole } from "../types/resq";
 import { DEMO_USERS } from "../services/resqStorage";
+import { backendLogin } from "../services/authApi";
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -59,9 +60,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   };
 
   // Quick One-Click Demo Login
-  const handleQuickDemoLogin = (user: UserProfile) => {
+  const handleQuickDemoLogin = async (user: UserProfile) => {
     setErrorMsg(null);
     setSuccessMsg(`Signing in as ${user.name} (${user.role})...`);
+    // Attempt backend sync in background
+    backendLogin(user.email, user.password || "").catch(() => {});
     setTimeout(() => {
       login(user);
       setSuccessMsg(null);
@@ -70,7 +73,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   };
 
   // Submit Login
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
 
@@ -82,30 +85,57 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    // Find in all registered & demo users
-    const found = allUsers.find(
+    // Find in local memory / storage
+    const localMatch = allUsers.find(
       (u) =>
         u.email.toLowerCase() === identifier ||
         u.id.toLowerCase() === identifier ||
         (u.badgeNumber && u.badgeNumber.toLowerCase() === identifier)
     );
 
-    if (!found) {
-      setErrorMsg(`No account found matching "${identifier}". You can use the Quick Demo buttons below or Sign Up.`);
+    // 1. Attempt Backend API Authentication (sharing profile info if recognized locally)
+    const apiRes = await backendLogin(
+      identifier,
+      password,
+      localMatch
+        ? {
+            role: localMatch.role,
+            name: localMatch.name,
+            agency: localMatch.agency,
+          }
+        : undefined
+    );
+
+    if (apiRes.success && apiRes.user) {
+      setSuccessMsg(`✓ Authenticated via FastAPI Gateway! Welcome back, ${apiRes.user.name}!`);
+      setTimeout(() => {
+        login(apiRes.user!);
+        setSuccessMsg(null);
+        onClose();
+      }, 400);
       return;
     }
 
-    if (found.password && password && found.password !== password) {
-      setErrorMsg("Incorrect password. Try using the 1-Click Quick Login below.");
+    // 2. Seamless Local Fallback (Guarantees zero downtime if backend is offline or syncing)
+    if (localMatch) {
+      if (localMatch.password && password && localMatch.password !== password) {
+        setErrorMsg("Incorrect password. Try using the 1-Click Quick Login below.");
+        return;
+      }
+      setSuccessMsg(`Welcome back, ${localMatch.name}! Loading ${localMatch.role} dashboard...`);
+      setTimeout(() => {
+        login(localMatch);
+        setSuccessMsg(null);
+        onClose();
+      }, 400);
       return;
     }
 
-    setSuccessMsg(`Welcome back, ${found.name}! Loading ${found.role} dashboard...`);
-    setTimeout(() => {
-      login(found);
-      setSuccessMsg(null);
-      onClose();
-    }, 400);
+    // 3. Neither backend nor local matched
+    setErrorMsg(
+      apiRes.error ||
+        `No account found matching "${identifier}". You can use the Quick Demo buttons below or Sign Up.`
+    );
   };
 
   // Submit Signup

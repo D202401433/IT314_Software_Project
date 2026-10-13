@@ -18,59 +18,59 @@ import { IncidentRecord, PortalRoleCategory } from "../types/resq";
 
 // Basemap layer configurations with maxNativeZoom to prevent labels disappearing at deep zoom
 const TILE_LAYERS = {
-  googleHybrid: {
-    name: "Satellite + Street Names (Google Hybrid)",
-    base: "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
-    subdomains: ["mt0", "mt1", "mt2", "mt3"],
-    maxZoom: 21,
-    maxNativeZoom: 19,
-    isSatellite: true,
-  },
-  googleRoadmap: {
-    name: "Detailed City & Road Map (Google Streets)",
-    base: "https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}",
-    subdomains: ["mt0", "mt1", "mt2", "mt3"],
-    maxZoom: 21,
-    maxNativeZoom: 19,
-    isSatellite: false,
-  },
   streets: {
-    name: "OpenStreetMap (All Villages, Lanes & Roads)",
-    base: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-    subdomains: ["a", "b", "c"],
-    maxZoom: 20,
+    name: "OpenStreetMap (All Roads, Villages & Towns - No Key Needed)",
+    base: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    subdomains: [],
+    maxZoom: 19,
     maxNativeZoom: 19,
     isSatellite: false,
   },
-  esriTopo: {
-    name: "Topographic & Physical Map (Esri Topo)",
-    base: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
-    subdomains: ["a", "b", "c"],
-    maxZoom: 20,
+  humanitarian: {
+    name: "Humanitarian OSM (Disaster & Relief Focus - No Key Needed)",
+    base: "https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png",
+    subdomains: ["a", "b"],
+    maxZoom: 19,
     maxNativeZoom: 19,
+    isSatellite: false,
+  },
+  esriStreets: {
+    name: "Esri World Streets (Clean Cartography - No Key Needed)",
+    base: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+    subdomains: ["a", "b", "c"],
+    maxZoom: 19,
+    maxNativeZoom: 18,
     isSatellite: false,
   },
   esriHybrid: {
-    name: "Esri Satellite + World Boundaries",
+    name: "Esri Satellite + World Boundaries (No Key Needed)",
     base: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
     overlay: "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
     subdomains: ["a", "b", "c"],
-    maxZoom: 20,
+    maxZoom: 19,
     maxNativeZoom: 18,
     isSatellite: true,
   },
+  esriTopo: {
+    name: "Topographic & Elevation Map (Esri Topo - No Key Needed)",
+    base: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
+    subdomains: ["a", "b", "c"],
+    maxZoom: 19,
+    maxNativeZoom: 18,
+    isSatellite: false,
+  },
   satellitePure: {
-    name: "Pure Satellite (No Labels)",
+    name: "Pure Satellite Imagery (No Labels - No Key Needed)",
     base: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
     subdomains: ["a", "b", "c"],
-    maxZoom: 20,
+    maxZoom: 19,
     maxNativeZoom: 18,
     isSatellite: true,
   },
 };
 
-// Permanent 100% watermark-free street & road labels overlay (Google Transparent Roads)
-const STREET_LABELS_OVERLAY = "https://mt1.google.com/vt/lyrs=h&x={x}&y={y}&z={z}";
+// Permanent 100% watermark-free street & road labels overlay (Esri Reference Labels)
+const STREET_LABELS_OVERLAY = "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}";
 
 function ResQGeoPortalInner() {
   const {
@@ -110,7 +110,7 @@ function ResQGeoPortalInner() {
   const [coordsText, setCoordsText] = useState("Lat: -- | Lon: --");
   const [currentZoom, setCurrentZoom] = useState(5);
   const [visibleAreaName, setVisibleAreaName] = useState<string>("India");
-  const [currentBaseLayer, setCurrentBaseLayer] = useState<keyof typeof TILE_LAYERS>("googleHybrid");
+  const [currentBaseLayer, setCurrentBaseLayer] = useState<keyof typeof TILE_LAYERS>("streets");
   const [streetOverlayActive, setStreetOverlayActive] = useState(false);
   const [showLayerMenu, setShowLayerMenu] = useState(false);
   const [showAboutModal, setShowAboutModal] = useState(false);
@@ -203,15 +203,14 @@ function ResQGeoPortalInner() {
 
     const initMap = async () => {
       try {
-        await loadScript("https://unpkg.com/leaflet@1.9.4/dist/leaflet.js");
-        await loadScript("https://unpkg.com/leaflet-minimap@3.6.1/dist/Control.MiniMap.min.js");
+        const L = (await import("leaflet")).default;
+        (window as any).L = L;
 
         if (isCancelled || !mapContainerRef.current) return;
-        const L = (window as any).L;
-        if (!L) return;
 
         if (mapRef.current) {
           mapRef.current.remove();
+          mapRef.current = null;
         }
 
         // Initialize Map with Crisp Integer Zoom and deep zoom allowance (maxZoom: 21)
@@ -236,11 +235,11 @@ function ResQGeoPortalInner() {
 
         mapRef.current = map;
 
-        // Base Layer: Google Hybrid with maxNativeZoom: 19 so labels NEVER disappear
-        const initialCfg = TILE_LAYERS.googleHybrid;
+        // Base Layer: OpenStreetMap (Standard 100% Free Open GIS - Zero Keys Required)
+        const initialCfg = TILE_LAYERS.streets;
         const baseLayer = L.tileLayer(initialCfg.base, {
-          maxZoom: 21,
-          maxNativeZoom: initialCfg.maxNativeZoom,
+          maxZoom: 19,
+          maxNativeZoom: 19,
           subdomains: initialCfg.subdomains,
           updateWhenZooming: false,
           updateWhenIdle: true,
@@ -250,28 +249,15 @@ function ResQGeoPortalInner() {
 
         // Watermark-Free Street & Place Names Overlay
         const streetOverlay = L.tileLayer(STREET_LABELS_OVERLAY, {
-          subdomains: ["mt0", "mt1", "mt2", "mt3"],
-          maxZoom: 21,
-          maxNativeZoom: 19,
+          subdomains: ["a", "b", "c"],
+          maxZoom: 19,
+          maxNativeZoom: 18,
           opacity: 1.0,
         });
         streetOverlayRef.current = streetOverlay;
 
         // Scale bar in bottom-left
         L.control.scale({ imperial: false, position: "bottomleft" }).addTo(map);
-
-        // MiniMap control in bottom-left
-        if (L.Control && L.Control.MiniMap) {
-          const miniLayer = L.tileLayer(TILE_LAYERS.streets.base, { maxZoom: 19 });
-          new L.Control.MiniMap(miniLayer, {
-            position: "bottomleft",
-            toggleDisplay: true,
-            width: 140,
-            height: 105,
-            zoomLevelFixed: 2,
-            aimingRectOptions: { color: "#0284c7", weight: 2 },
-          }).addTo(map);
-        }
 
         // Feature Layer Groups
         measureLayerRef.current = L.layerGroup().addTo(map);
@@ -306,6 +292,19 @@ function ResQGeoPortalInner() {
           }, 500);
         });
 
+        // Ensure canvas dimensions are refreshed for the layout
+        setTimeout(() => {
+          if (!isCancelled && mapRef.current) {
+            mapRef.current.invalidateSize();
+          }
+        }, 100);
+
+        setTimeout(() => {
+          if (!isCancelled && mapRef.current) {
+            mapRef.current.invalidateSize();
+          }
+        }, 500);
+
         // Initial smooth glide into India
         setTimeout(() => {
           if (!isCancelled && mapRef.current) {
@@ -314,6 +313,7 @@ function ResQGeoPortalInner() {
               easeLinearity: 0.22,
               noMoveStart: true,
             });
+            mapRef.current.invalidateSize();
           }
         }, 400);
       } catch (err) {
@@ -333,7 +333,7 @@ function ResQGeoPortalInner() {
         mapRef.current = null;
       }
     };
-  }, [loadScript, fetchRealPlaceName]);
+  }, [fetchRealPlaceName]);
 
   // Handle map navigation requests from context
   useEffect(() => {
@@ -592,9 +592,9 @@ function ResQGeoPortalInner() {
   const toggleSatelliteOrStreets = () => {
     const isCurrentlySatellite = TILE_LAYERS[currentBaseLayer].isSatellite;
     if (isCurrentlySatellite) {
-      switchBaseLayer("googleRoadmap");
+      switchBaseLayer("streets");
     } else {
-      switchBaseLayer("googleHybrid");
+      switchBaseLayer("esriHybrid");
     }
   };
 
