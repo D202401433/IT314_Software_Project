@@ -1,18 +1,13 @@
-name: CI/CD Pipeline
+name: Continuous Integration (CI)
 
 on:
-  push:
-    branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
-
-env:
-  DOCKER_BUILDKIT: 1
 
 jobs:
   # ============================================================================
@@ -157,17 +152,14 @@ jobs:
           else
             echo "No test suite found in backend/tests/ — running smoke test"
             python -c "from main import app; print('FastAPI app imports successfully')"
-          fi  # ============================================================================
-  # 5. Container Build, Trivy Security Scan & GHCR Publication
-  #    Optimized single-pass build: builds image once, scans with Trivy (cached DB),
-  #    and pushes to GHCR directly on 'main' push without rebuilding!
+          fi
+
   # ============================================================================
-  container-build-and-security:
-    name: Build & Security / Container (${{ matrix.name }})
+  # 5. Fast Container Build Validation & Trivy Vulnerability Scan
+  # ============================================================================
+  container-validation:
+    name: Container / Build & Security Scan (${{ matrix.name }})
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
     strategy:
       fail-fast: false
       matrix:
@@ -191,30 +183,13 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to GitHub Container Registry (GHCR)
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata (tags, labels) for Docker
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository }}/${{ matrix.image_name }}
-          tags: |
-            type=raw,value=latest
-            type=sha,format=short,prefix=sha-
-
-      - name: Build and load image for local security scan
+      - name: Build image for vulnerability scan
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.file }}
           load: true
-          tags: ${{ matrix.image_name }}:latest
+          tags: ${{ matrix.image_name }}:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -222,26 +197,13 @@ jobs:
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: 'image'
-          image-ref: ${{ matrix.image_name }}:latest
+          image-ref: ${{ matrix.image_name }}:test
           severity: 'CRITICAL,HIGH'
           exit-code: '0'
           cache: true
 
-      - name: Push verified image to GHCR (main only)
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        env:
-          DOCKER_TAGS: ${{ steps.meta.outputs.tags }}
-        run: |
-          echo "$DOCKER_TAGS" | while IFS= read -r tag; do
-            if [ -n "$tag" ]; then
-              docker tag ${{ matrix.image_name }}:latest "$tag"
-              docker push "$tag"
-            fi
-          done
-
-
   # ============================================================================
-  # 6. CI Pipeline Gatekeeper (Blocking Status Check)
+  # 6. CI Pipeline Gatekeeper (Blocking Status Check for PR Merge)
   # ============================================================================
   ci-gatekeeper:
     name: Pipeline Status / Quality Gate
@@ -251,7 +213,7 @@ jobs:
       - python-check
       - database-schema-validation
       - backend-tests
-      - container-build-and-security
+      - container-validation
     if: always()
     steps:
       - name: Evaluate pipeline execution status
@@ -260,39 +222,8 @@ jobs:
              [ "${{ needs.python-check.result }}" != "success" ] || \
              [ "${{ needs.database-schema-validation.result }}" != "success" ] || \
              [ "${{ needs.backend-tests.result }}" != "success" ] || \
-             [ "${{ needs.container-build-and-security.result }}" != "success" ]; then
-            echo "Pipeline check failed: one or more jobs did not succeed."
+             [ "${{ needs.container-validation.result }}" != "success" ]; then
+            echo "CI check failed: one or more verification jobs did not succeed."
             exit 1
           fi
-          echo "Pipeline check passed: all validation and security jobs succeeded."
-
-  # ============================================================================
-  # 7. Continuous Deployment (CD): Production Verification
-  # ============================================================================
-  deploy:
-    name: Continuous Deployment / Deploy to Production
-    runs-on: ubuntu-latest
-    needs: ci-gatekeeper
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    environment:
-      name: production
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Verify Deployment Manifest & Production Readiness
-        run: |
-          echo "========================================================"
-          echo "Initiating automated deployment sequence for commit: ${{ github.sha }}"
-          echo "Repository: ${{ github.repository }}"
-          echo "Target Registry: ghcr.io/${{ github.repository }}"
-          echo "========================================================"
-          if [ -f "docker-compose.prod.yml" ]; then
-            echo "Production Docker Compose manifest verified: docker-compose.prod.yml"
-          else
-            echo "Missing docker-compose.prod.yml manifest"
-            exit 1
-          fi
-          echo "Production deployment readiness verification complete."
-
-
+          echo "CI check passed: all validation and security jobs succeeded."

@@ -381,13 +381,19 @@ docker compose -f docker-compose.prod.yml up --build -d
 ```
 
 ### 🔄 CI/CD Automation & Security Gates
-Every commit and pull request against `main` runs through the automated pipeline ([`.github/workflows/ci_cd.yml`](.github/workflows/ci_cd.yml)):
-1. **Frontend Check:** Node.js 20 & ESLint.
-2. **Python Check:** Ruff linter + Bandit static security analysis (SAST).
-3. **Database Integrity:** PostgreSQL 16 + PostGIS schema validation and cryptographic audit chain hash verification.
-4. **Backend Tests:** Pytest unit test execution.
-5. **Security & Artifacts:** Single-pass Docker builds scanned by **Aqua Security Trivy** (blocking critical vulnerabilities) and published to **GitHub Container Registry (GHCR)**.
-6. **CD Gate:** Automated deployment readiness verification.
+The repository separates verification (CI) from publication & deployment (CD):
+1. **Continuous Integration ([`.github/workflows/ci.yml`](.github/workflows/ci.yml))**:
+   - Triggers on every **Pull Request** targeting `main`.
+   - **Frontend Check:** Node.js 20 & ESLint.
+   - **Python Check:** Ruff linter + Bandit static security analysis (SAST).
+   - **Database Integrity:** PostgreSQL 16 + PostGIS schema validation and cryptographic audit chain hash verification.
+   - **Backend Tests:** Pytest unit test execution.
+   - **Container Validation:** Fast Docker build verification and **Aqua Security Trivy** vulnerability scan.
+   - **Quality Gate:** `ci-gatekeeper` blocks PR merge if any check fails.
+2. **Continuous Deployment ([`.github/workflows/cd.yml`](.github/workflows/cd.yml))**:
+   - Triggers on **Push / Merge to `main`**.
+   - Builds production container images with tags (`latest`, `sha-*`) and pushes them to **GitHub Container Registry (GHCR)**.
+   - Verifies deployment readiness against production manifests (`docker-compose.prod.yml`).
 
 ---
 
