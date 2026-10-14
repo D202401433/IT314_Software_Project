@@ -11,11 +11,46 @@ concurrency:
 
 jobs:
   # ============================================================================
-  # 1. Frontend Quality & Linting
+  # 0. Path Detection: Only test and build what actually changed
+  # ============================================================================
+  detect-changes:
+    name: Detect Changed Subsystems
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+      backend: ${{ steps.filter.outputs.backend }}
+      ai-workers: ${{ steps.filter.outputs.ai-workers }}
+      db: ${{ steps.filter.outputs.db }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check for file changes
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            frontend:
+              - 'frontend/**'
+              - '.github/workflows/ci.yml'
+            backend:
+              - 'backend/**'
+              - '.github/workflows/ci.yml'
+            ai-workers:
+              - 'ai-workers/**'
+              - '.github/workflows/ci.yml'
+            db:
+              - 'backend/db/**'
+              - '.github/workflows/ci.yml'
+
+  # ============================================================================
+  # 1. Frontend Quality & Linting (Only if frontend changed)
   # ============================================================================
   frontend-check:
     name: Frontend / Static Analysis & Lint
     runs-on: ubuntu-latest
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.frontend == 'true' || github.event_name == 'workflow_dispatch' }}
     defaults:
       run:
         working-directory: ./frontend
@@ -37,11 +72,13 @@ jobs:
         run: npm run lint
 
   # ============================================================================
-  # 2. Python Backend & AI Workers Quality Scan
+  # 2. Python Backend & AI Workers Quality Scan (Only if Python files changed)
   # ============================================================================
   python-check:
     name: Python / Lint & Security Scan (SAST)
     runs-on: ubuntu-latest
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.ai-workers == 'true' || github.event_name == 'workflow_dispatch' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -64,11 +101,13 @@ jobs:
         run: bandit -r backend/ ai-workers/ -ll -ii
 
   # ============================================================================
-  # 3. Database Schema Validation & Cryptographic Triggers (PostgreSQL 16 + PostGIS)
+  # 3. Database Schema Validation (Only if DB migrations changed)
   # ============================================================================
   database-schema-validation:
     name: Database / Schema & Trigger Integrity
     runs-on: ubuntu-latest
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.db == 'true' || github.event_name == 'workflow_dispatch' }}
     services:
       postgres:
         image: postgis/postgis:16-3.4
@@ -119,12 +158,13 @@ jobs:
           PGPASSWORD: postgres
 
   # ============================================================================
-  # 4. Backend Unit & API Smoke Tests
+  # 4. Backend Unit & API Smoke Tests (Only if backend changed)
   # ============================================================================
   backend-tests:
     name: Backend / Unit Tests & API Verification
     runs-on: ubuntu-latest
-    needs: python-check
+    needs: [detect-changes, python-check]
+    if: ${{ needs.detect-changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch' }}
     defaults:
       run:
         working-directory: ./backend
@@ -155,49 +195,88 @@ jobs:
           fi
 
   # ============================================================================
-  # 5. Fast Container Build Validation & Trivy Vulnerability Scan
+  # 5. Fast Container Build Validation & Scan (Only builds changed containers)
   # ============================================================================
-  container-validation:
-    name: Container / Build & Security Scan (${{ matrix.name }})
+  container-build-frontend:
+    name: Container / Build & Scan Frontend
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: frontend
-            context: ./frontend
-            file: ./frontend/Dockerfile
-            image_name: drch_frontend
-          - name: backend
-            context: ./backend
-            file: ./backend/Dockerfile
-            image_name: drch_backend
-          - name: ai-workers
-            context: ./ai-workers
-            file: ./ai-workers/Dockerfile
-            image_name: drch_ai_workers
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.frontend == 'true' || github.event_name == 'workflow_dispatch' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-
-      - name: Build image for vulnerability scan
+      - name: Build image for scan
         uses: docker/build-push-action@v6
         with:
-          context: ${{ matrix.context }}
-          file: ${{ matrix.file }}
+          context: ./frontend
+          file: ./frontend/Dockerfile
           load: true
-          tags: ${{ matrix.image_name }}:test
+          tags: drch_frontend:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
       - name: Run Trivy vulnerability scan
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: 'image'
-          image-ref: ${{ matrix.image_name }}:test
+          image-ref: drch_frontend:test
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'
+          cache: true
+
+  container-build-backend:
+    name: Container / Build & Scan Backend
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build image for scan
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          load: true
+          tags: drch_backend:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Run Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'image'
+          image-ref: drch_backend:test
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'
+          cache: true
+
+  container-build-ai-workers:
+    name: Container / Build & Scan AI Workers
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.ai-workers == 'true' || github.event_name == 'workflow_dispatch' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build image for scan
+        uses: docker/build-push-action@v6
+        with:
+          context: ./ai-workers
+          file: ./ai-workers/Dockerfile
+          load: true
+          tags: drch_ai_workers:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Run Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'image'
+          image-ref: drch_ai_workers:test
           severity: 'CRITICAL,HIGH'
           exit-code: '0'
           cache: true
@@ -209,21 +288,25 @@ jobs:
     name: Pipeline Status / Quality Gate
     runs-on: ubuntu-latest
     needs:
+      - detect-changes
       - frontend-check
       - python-check
       - database-schema-validation
       - backend-tests
-      - container-validation
+      - container-build-frontend
+      - container-build-backend
+      - container-build-ai-workers
     if: always()
     steps:
       - name: Evaluate pipeline execution status
         run: |
-          if [ "${{ needs.frontend-check.result }}" != "success" ] || \
-             [ "${{ needs.python-check.result }}" != "success" ] || \
-             [ "${{ needs.database-schema-validation.result }}" != "success" ] || \
-             [ "${{ needs.backend-tests.result }}" != "success" ] || \
-             [ "${{ needs.container-validation.result }}" != "success" ]; then
-            echo "CI check failed: one or more verification jobs did not succeed."
-            exit 1
-          fi
-          echo "CI check passed: all validation and security jobs succeeded."
+          # Verify no job that ran had a failure (skipped jobs count as valid)
+          RESULTS="${{ needs.frontend-check.result }} ${{ needs.python-check.result }} ${{ needs.database-schema-validation.result }} ${{ needs.backend-tests.result }} ${{ needs.container-build-frontend.result }} ${{ needs.container-build-backend.result }} ${{ needs.container-build-ai-workers.result }}"
+          echo "Job execution states: $RESULTS"
+          for res in $RESULTS; do
+            if [ "$res" = "failure" ] || [ "$res" = "cancelled" ]; then
+              echo "❌ CI check failed: one or more verification jobs failed."
+              exit 1
+            fi
+          done
+          echo "✅ CI check passed: all executed jobs passed successfully."
