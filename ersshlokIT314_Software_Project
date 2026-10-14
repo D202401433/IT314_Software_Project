@@ -1,0 +1,113 @@
+warning: in the working copy of 'frontend/src/components/AuthModal.tsx', CRLF will be replaced by LF the next time Git touches it
+[1mdiff --git a/frontend/src/app/login/page.tsx b/frontend/src/app/login/page.tsx[m
+[1mindex 44f77f9..c43e01a 100644[m
+[1m--- a/frontend/src/app/login/page.tsx[m
+[1m+++ b/frontend/src/app/login/page.tsx[m
+[36m@@ -1,17 +1,23 @@[m
+ "use client";[m
+ [m
+[31m-import React, { useState } from "react";[m
+[32m+[m[32mimport React, { Suspense, useState } from "react";[m
+ import Link from "next/link";[m
+[31m-import { useRouter } from "next/navigation";[m
+[32m+[m[32mimport { useRouter, useSearchParams } from "next/navigation";[m
+ import { ResQProvider, useResQ } from "../../context/ResQContext";[m
+ import { PortalRoleCategory, UserProfile } from "../../types/resq";[m
+ import { DEMO_USERS } from "../../services/resqStorage";[m
+[32m+[m[32mimport { StaffSignIn } from "./staff-sign-in";[m
+[32m+[m
+[32m+[m[32m// Administrator (Command & Dispatch) signs in against the backend; other tabs keep the demo flow.[m
+[32m+[m[32mconst usesStaffSignIn = (category: PortalRoleCategory): boolean => category === "admin";[m
+ [m
+ function LoginPageContent() {[m
+   const router = useRouter();[m
+   const { login, allUsers } = useResQ();[m
+[32m+[m[32m  // Protected workspace redirects arrive as /login?next=/dm...; open the staff tab for them.[m
+[32m+[m[32m  const next = useSearchParams().get("next") ?? undefined;[m
+ [m
+[31m-  const [selectedCategory, setSelectedCategory] = useState<PortalRoleCategory>("user");[m
+[32m+[m[32m  const [selectedCategory, setSelectedCategory] = useState<PortalRoleCategory>(next?.startsWith("/dm") ? "admin" : "user");[m
+   const [loginEmail, setLoginEmail] = useState("");[m
+   const [loginPassword, setLoginPassword] = useState("");[m
+   const [showPassword, setShowPassword] = useState(false);[m
+[36m@@ -184,7 +190,8 @@[m [mfunction LoginPageContent() {[m
+             </div>[m
+           </div>[m
+ [m
+[31m-          {/* Quick 1-Click Demo */}[m
+[32m+[m[32m          {/* Quick 1-Click Demo (not offered for Administrator: staff use real authentication) */}[m
+[32m+[m[32m          {!usesStaffSignIn(selectedCategory) && ([m
+           <div className="p-3 bg-slate-900/90 rounded-xl border border-slate-800">[m
+             <div className="flex items-center justify-between mb-2">[m
+               <span className="text-[11px] font-bold text-amber-400 flex items-center gap-1">[m
+[36m@@ -206,6 +213,7 @@[m [mfunction LoginPageContent() {[m
+               ))}[m
+             </div>[m
+           </div>[m
+[32m+[m[32m          )}[m
+ [m
+           {errorMsg && ([m
+             <div className="p-3 bg-red-950/80 border border-red-700/60 rounded-xl text-red-200 text-xs flex items-center gap-2">[m
+[36m@@ -221,6 +229,9 @@[m [mfunction LoginPageContent() {[m
+           )}[m
+ [m
+           {/* Form */}[m
+[32m+[m[32m          {usesStaffSignIn(selectedCategory) ? ([m
+[32m+[m[32m            <StaffSignIn next={next} />[m
+[32m+[m[32m          ) : ([m
+           <form onSubmit={handleLoginSubmit} className="space-y-4">[m
+             <div>[m
+               <label className="block text-xs font-semibold text-slate-300 mb-1">[m
+[36m@@ -269,6 +280,7 @@[m [mfunction LoginPageContent() {[m
+               <span>→</span>[m
+             </button>[m
+           </form>[m
+[32m+[m[32m          )}[m
+ [m
+           {/* Footer Navigation */}[m
+           <div className="pt-3 border-t border-slate-800 text-center text-xs text-slate-400 space-y-2">[m
+[36m@@ -298,7 +310,9 @@[m [mfunction LoginPageContent() {[m
+ export default function LoginPage() {[m
+   return ([m
+     <ResQProvider>[m
+[31m-      <LoginPageContent />[m
+[32m+[m[32m      <Suspense fallback={null}>[m
+[32m+[m[32m        <LoginPageContent />[m
+[32m+[m[32m      </Suspense>[m
+     </ResQProvider>[m
+   );[m
+ }[m
+[1mdiff --git a/frontend/src/components/AuthModal.tsx b/frontend/src/components/AuthModal.tsx[m
+[1mindex b46611b..ecb4dde 100644[m
+[1m--- a/frontend/src/components/AuthModal.tsx[m
+[1m+++ b/frontend/src/components/AuthModal.tsx[m
+[36m@@ -4,6 +4,7 @@[m [mimport React, { useState } from "react";[m
+ import { useResQ } from "../context/ResQContext";[m
+ import { PortalRoleCategory, UserProfile, UserRole } from "../types/resq";[m
+ import { DEMO_USERS } from "../services/resqStorage";[m
+[32m+[m[32mimport { StaffSignIn } from "../app/login/staff-sign-in";[m
+ [m
+ interface AuthModalProps {[m
+   isOpen: boolean;[m
+[36m@@ -322,8 +323,8 @@[m [mexport const AuthModal: React.FC<AuthModalProps> = ({[m
+             </div>[m
+           </div>[m
+ [m
+[31m-          {/* Quick 1-Click Demo Login Presets */}[m
+[31m-          {mode === "login" && ([m
+[32m+[m[32m          {/* Quick 1-Click Demo Login Presets (not offered for Administrator: staff use real authentication) */}[m
+[32m+[m[32m          {mode === "login" && selectedCategory !== "admin" && ([m
+             <div className="p-3 bg-slate-900/80 rounded-xl border border-slate-800">[m
+               <div className="flex items-center justify-between mb-2">[m
+                 <span className="text-[11px] font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">[m
+[36m@@ -365,7 +366,9 @@[m [mexport const AuthModal: React.FC<AuthModalProps> = ({[m
+           )}[m
+ [m
+           {/* ============ SIGN IN FORM ============ */}[m
+[31m-          {mode === "login" ? ([m
+[32m+[m[32m          {mode === "login" && selectedCategory === "admin" ? ([m
+[32m+[m[32m            <StaffSignIn />[m
+[32m+[m[32m          ) : mode === "login" ? ([m
+             <form onSubmit={handleLoginSubmit} className="space-y-3.5">[m
+               <div>[m
+                 <label className="block text-xs font-semibold text-slate-300 mb-1">[m

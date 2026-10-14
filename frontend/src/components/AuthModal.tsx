@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { useResQ } from "../context/ResQContext";
 import { PortalRoleCategory, UserProfile, UserRole } from "../types/resq";
 import { DEMO_USERS } from "../services/resqStorage";
+import { StaffSignIn } from "../app/login/staff-sign-in";
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -322,8 +323,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
           </div>
 
-          {/* Quick 1-Click Demo Login Presets */}
-          {mode === "login" && (
+          {/* Quick 1-Click Demo Login Presets (not offered for Administrator: staff use real authentication) */}
+          {mode === "login" && selectedCategory !== "admin" && (
             <div className="p-3 bg-slate-900/80 rounded-xl border border-slate-800">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
@@ -365,7 +366,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           )}
 
           {/* ============ SIGN IN FORM ============ */}
-          {mode === "login" ? (
+          {mode === "login" && selectedCategory === "admin" ? (
+            <StaffSignIn />
+          ) : mode === "login" ? (
             <form onSubmit={handleLoginSubmit} className="space-y-3.5">
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">

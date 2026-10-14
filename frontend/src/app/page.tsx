@@ -14,6 +14,7 @@ import { GeneralPublicDashboardView } from "../components/role-views/GeneralPubl
 import { CitizenDashboardView } from "../components/role-views/CitizenDashboardView";
 import { AdminDashboardView } from "../components/role-views/AdminDashboardView";
 import { ServiceProviderDashboardView } from "../components/role-views/ServiceProviderDashboardView";
+import { LiveOperationsLayer } from "../components/dm/LiveOperationsLayer";
 import { IncidentRecord, PortalRoleCategory } from "../types/resq";
 
 // Basemap layer configurations with maxNativeZoom to prevent labels disappearing at deep zoom
@@ -1606,6 +1607,9 @@ function ResQGeoPortalInner() {
           <div className="flex-1" onClick={() => setShowNavDrawer(false)} />
         </div>
       )}
+
+      {/* Disaster Management: real incidents from the operations database (DM staff only) */}
+      <LiveOperationsLayer mapRef={mapRef} />
 
       {/* ============ CITIZEN REPORT MODAL ============ */}
       <CitizenReportModal
