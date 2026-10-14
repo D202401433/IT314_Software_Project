@@ -71,14 +71,38 @@ def verify_jwt_token(token: str, secret: str = JWT_SECRET) -> dict:
     return payload
 
 # ==============================================================================
-# In-Memory & Persistent Demo Users Repository (Matches DRCH Roles 1-to-1)
+# In-Memory Demo Users Repository (Matches DRCH Disaster Roles 1-to-1)
 #
 # ARCHITECTURAL NOTICE (Production Hardening Roadmap):
 # - This static fixture serves development, testing, and live emergency simulations.
 # - TODO (SEC-01): Before production release, migrate all authentication to the
 #   PostgreSQL user_auth table using Argon2id/bcrypt hashed passwords.
 # - TODO (SEC-02): Gate demo fixtures behind ENABLE_DEMO_ACCOUNTS=true (fail-closed in prod).
+# - TODO (SEC-03): Purge plaintext fixtures from git history and rotate all production secrets.
 # ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Password Hashing & Verification (PBKDF2-HMAC-SHA256, Zero External Deps)
+# ------------------------------------------------------------------------------
+PASSWORD_SALT = os.getenv("PASSWORD_SALT", "drch_demo_pbkdf2_salt_v1").encode()
+
+def hash_password(password: str, salt: bytes = PASSWORD_SALT) -> str:
+    """Derive secure PBKDF2-HMAC-SHA256 password hash (100,000 iterations)."""
+    return hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations=100_000).hex()
+
+def verify_password(plain_password: str, stored_hash: str, salt: bytes = PASSWORD_SALT) -> bool:
+    """Constant-time password hash verification."""
+    if not plain_password or not stored_hash:
+        return False
+    computed = hash_password(plain_password, salt=salt)
+    return hmac.compare_digest(computed, stored_hash)
+
+ENABLE_DEMO_ACCOUNTS = os.getenv(
+    "ENABLE_DEMO_ACCOUNTS",
+    "true" if os.getenv("ENVIRONMENT", "development").lower() != "production" else "false",
+).lower() == "true"
+
+# Profile fixtures without plaintext credentials
 DEMO_USERS = [
     {
         "id": "USR-001",
@@ -88,7 +112,6 @@ DEMO_USERS = [
         "agency": "National Disaster Management Authority (NDMA)",
         "badgeNumber": "NDMA-HQ-01",
         "phone": "+91 98765 43210",
-        "password": "admin123password",
     },
     {
         "id": "USR-002",
@@ -98,7 +121,6 @@ DEMO_USERS = [
         "agency": "ERSS 112 Emergency Operations Center",
         "badgeNumber": "ERSS-OP-44",
         "phone": "+91 98765 43211",
-        "password": "admin123password",
     },
     {
         "id": "USR-003",
@@ -109,7 +131,6 @@ DEMO_USERS = [
         "badgeNumber": "EMS-MED-07",
         "phone": "+91 98765 43212",
         "assignedUnitCallsign": "AMB-07",
-        "password": "provider123password",
     },
     {
         "id": "USR-004",
@@ -120,7 +141,6 @@ DEMO_USERS = [
         "badgeNumber": "SFS-CMD-17",
         "phone": "+91 98765 43213",
         "assignedUnitCallsign": "FIRE-17",
-        "password": "provider123password",
     },
     {
         "id": "USR-005",
@@ -131,7 +151,6 @@ DEMO_USERS = [
         "badgeNumber": "NDRF-BN8-04",
         "phone": "+91 98765 43214",
         "assignedUnitCallsign": "RESCUE-04",
-        "password": "provider123password",
     },
     {
         "id": "USR-006",
@@ -141,7 +160,6 @@ DEMO_USERS = [
         "agency": "Disaster Relief Supply & Inventory Command",
         "badgeNumber": "LOG-SUP-12",
         "phone": "+91 98765 43215",
-        "password": "provider123password",
     },
     {
         "id": "USR-007",
@@ -151,7 +169,6 @@ DEMO_USERS = [
         "agency": "ISRO / DRCH Technical Operations",
         "badgeNumber": "SYS-ADMIN-01",
         "phone": "+91 98765 43216",
-        "password": "admin123password",
     },
     {
         "id": "USR-008",
@@ -160,24 +177,43 @@ DEMO_USERS = [
         "role": "Public / Citizen",
         "agency": "Resident / Public Citizen",
         "phone": "+91 98765 43217",
-        "password": "user123password",
     },
 ]
 
 # Mutable users store
 users_db: dict[str, dict] = {}
 
+# In-memory salted hashes for standard demo login behavior (no plaintext in constants)
+DEMO_PASSWORDS = {
+    "admin": hash_password("admin123password"),
+    "provider": hash_password("provider123password"),
+    "user": hash_password("user123password"),
+}
+
 def initialize_users_db():
     users_db.clear()
+    if not ENABLE_DEMO_ACCOUNTS:
+        logger.info("Production mode: Demo accounts are disabled (fail-closed).")
+        return
+
     for u in DEMO_USERS:
-        users_db[u["email"].lower()] = dict(u)
-        users_db[u["id"].lower()] = dict(u)
-        if "badgeNumber" in u:
-            users_db[u["badgeNumber"].lower()] = dict(u)
+        user_copy = dict(u)
+        role_lower = user_copy["role"].lower()
+        if "admin" in role_lower or "commander" in role_lower or "dispatcher" in role_lower:
+            user_copy["password_hash"] = DEMO_PASSWORDS["admin"]
+        elif "citizen" in role_lower or "public" in role_lower:
+            user_copy["password_hash"] = DEMO_PASSWORDS["user"]
+        else:
+            user_copy["password_hash"] = DEMO_PASSWORDS["provider"]
+
+        users_db[user_copy["email"].lower()] = user_copy
+        users_db[user_copy["id"].lower()] = user_copy
+        if "badgeNumber" in user_copy:
+            users_db[user_copy["badgeNumber"].lower()] = user_copy
 
     # Aliases to guarantee 100% smooth matching for all variations
     # Citizen aliases
-    citizen_user = dict(DEMO_USERS[7])
+    citizen_user = dict(users_db.get(DEMO_USERS[7]["email"].lower(), DEMO_USERS[7]))
     users_db["citizen@resq.gov.in"] = citizen_user
     users_db["citizen"] = citizen_user
     users_db["user"] = citizen_user
@@ -185,43 +221,43 @@ def initialize_users_db():
     users_db["public"] = citizen_user
 
     # Commander aliases
-    commander_user = dict(DEMO_USERS[0])
+    commander_user = dict(users_db.get(DEMO_USERS[0]["email"].lower(), DEMO_USERS[0]))
     users_db["commander"] = commander_user
     users_db["incident commander"] = commander_user
 
     # Dispatcher aliases
-    disp_user = dict(DEMO_USERS[1])
+    disp_user = dict(users_db.get(DEMO_USERS[1]["email"].lower(), DEMO_USERS[1]))
     users_db["dispatcher"] = disp_user
     users_db["112"] = disp_user
 
     # Medic aliases
-    medic_user = dict(DEMO_USERS[2])
+    medic_user = dict(users_db.get(DEMO_USERS[2]["email"].lower(), DEMO_USERS[2]))
     users_db["medic"] = medic_user
     users_db["ambulance"] = medic_user
     users_db["amb-07"] = medic_user
     users_db["108"] = medic_user
 
     # Firefighter aliases
-    fire_user = dict(DEMO_USERS[3])
+    fire_user = dict(users_db.get(DEMO_USERS[3]["email"].lower(), DEMO_USERS[3]))
     users_db["firefighter"] = fire_user
     users_db["fire"] = fire_user
     users_db["fire-17"] = fire_user
 
     # NDRF aliases
-    ndrf_user = dict(DEMO_USERS[4])
+    ndrf_user = dict(users_db.get(DEMO_USERS[4]["email"].lower(), DEMO_USERS[4]))
     users_db["ndrf"] = ndrf_user
     users_db["sdrf"] = ndrf_user
     users_db["rescue-04"] = ndrf_user
     users_db["ndrf-8bn-09"] = ndrf_user
 
     # Logistics aliases
-    log_user = dict(DEMO_USERS[5])
+    log_user = dict(users_db.get(DEMO_USERS[5]["email"].lower(), DEMO_USERS[5]))
     users_db["logistics"] = log_user
     users_db["supply"] = log_user
     users_db["log-disp-03"] = log_user
 
     # Admin aliases
-    adm_user = dict(DEMO_USERS[6])
+    adm_user = dict(users_db.get(DEMO_USERS[6]["email"].lower(), DEMO_USERS[6]))
     users_db["admin"] = adm_user
     users_db["administrator"] = adm_user
     users_db["sys-admin-99"] = adm_user
@@ -379,11 +415,17 @@ def api_login(req: LoginRequest):
 
     user = find_user(raw_ident)
 
-    # If not found in presets, seamlessly auto-provision so user is NEVER blocked
+    # If not found in presets
     if not user:
+        if not ENABLE_DEMO_ACCOUNTS:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid credentials.",
+            )
         clean_name = raw_ident.split("@")[0].replace(".", " ").replace("_", " ").title() if "@" in raw_ident else raw_ident.title()
         user_id = f"USR-{abs(hash(raw_ident)) % 900 + 100:03d}"
         role = req.role or ("Command Officer / Incident Commander" if "command" in raw_ident.lower() else "Public / Citizen")
+        pwd = req.password.strip() if req.password else "user123password"
         user = {
             "id": user_id,
             "name": req.name or clean_name,
@@ -391,23 +433,37 @@ def api_login(req: LoginRequest):
             "role": role,
             "agency": req.agency or ("NDMA Operations" if "command" in raw_ident.lower() else "Resident / Public Citizen"),
             "phone": "+91 98765 00000",
-            "password": req.password or "user123password",
+            "password_hash": hash_password(pwd),
         }
         users_db[raw_ident.lower()] = user
         users_db[user["email"].lower()] = user
         users_db[user["id"].lower()] = user
         logger.info(f"Auto-provisioned session for '{raw_ident}' as {role}")
 
-    # Validate password only if explicit user entered a non-matching password
-    stored_password = user.get("password")
-    if stored_password and req.password:
-        # Allow either standard demo passwords or exact password
-        valid_passwords = {stored_password, "admin123password", "provider123password", "user123password", "citizen123password"}
-        if req.password.strip() not in valid_passwords and req.password.strip() != stored_password:
+    # Password validation:
+    # 1. 1-Click demo login (empty password) is permitted when ENABLE_DEMO_ACCOUNTS is True
+    # 2. If password provided, verify against PBKDF2 hash using constant-time comparison
+    stored_hash = user.get("password_hash")
+    if req.password and req.password.strip():
+        submitted = req.password.strip()
+        valid = False
+        if stored_hash and verify_password(submitted, stored_hash):
+            valid = True
+        elif ENABLE_DEMO_ACCOUNTS:
+            for demo_hash in DEMO_PASSWORDS.values():
+                if verify_password(submitted, demo_hash):
+                    valid = True
+                    break
+        if not valid:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Incorrect password. For demo accounts, click the 1-Click login or use standard demo password.",
+                detail="Incorrect password. For demo accounts, click 1-Click login or use standard demo password.",
             )
+    elif not ENABLE_DEMO_ACCOUNTS:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Password is required.",
+        )
 
     token = create_jwt_token(
         {
@@ -421,6 +477,7 @@ def api_login(req: LoginRequest):
 
     safe_user = dict(user)
     safe_user.pop("password", None)
+    safe_user.pop("password_hash", None)
 
     logger.info(f"User {user['name']} ({user['role']}) authenticated successfully via API Gateway.")
     return {
@@ -448,7 +505,7 @@ def api_signup(req: SignupRequest):
         "id": new_id,
         "name": req.name.strip(),
         "email": email_clean,
-        "password": req.password.strip(),
+        "password_hash": hash_password(req.password.strip()),
         "role": req.role,
         "agency": req.agency or "Independent Resident",
         "phone": req.phone or "+91 98765 00000",
@@ -470,6 +527,7 @@ def api_signup(req: SignupRequest):
 
     safe_user = dict(new_user)
     safe_user.pop("password", None)
+    safe_user.pop("password_hash", None)
 
     logger.info(f"New user registered via API: {new_user['name']} as {new_user['role']}")
     return {
@@ -523,4 +581,5 @@ def api_me(authorization: Optional[str] = Header(None)):
 
     safe_user = dict(user)
     safe_user.pop("password", None)
+    safe_user.pop("password_hash", None)
     return {"success": True, "user": safe_user}
