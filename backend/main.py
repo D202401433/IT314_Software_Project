@@ -475,10 +475,11 @@ def api_me(authorization: Optional[str] = Header(None)):
     token = authorization.split(" ")[1]
     try:
         payload = verify_jwt_token(token)
-    except Exception as e:
+    except ValueError as e:
+        # verify_jwt_token raises ValueError for invalid/expired tokens
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Token verification failed: {str(e)}",
+            detail=f"Token verification failed: {e!s}",
         )
 
     user = find_user(payload.get("sub", "")) or find_user(payload.get("email", ""))
