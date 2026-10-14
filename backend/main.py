@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import binascii
 import hashlib
 import hmac
 import json
@@ -475,8 +476,7 @@ def api_me(authorization: Optional[str] = Header(None)):
     token = authorization.split(" ")[1]
     try:
         payload = verify_jwt_token(token)
-    except ValueError as e:
-        # verify_jwt_token raises ValueError for invalid/expired tokens
+    except (ValueError, binascii.Error) as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Token verification failed: {e!s}",
