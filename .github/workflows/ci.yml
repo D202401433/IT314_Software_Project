@@ -145,6 +145,8 @@ jobs:
     defaults:
       run:
         working-directory: ./backend
+    env:
+      JWT_SECRET: "ci_pipeline_jwt_secret_token_minimum_32_characters_key"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

@@ -1,15 +1,38 @@
+import os
 import sys
 from pathlib import Path
+import pytest
 
 # Ensure backend root is on sys.path
 backend_dir = Path(__file__).resolve().parent.parent
 if str(backend_dir) not in sys.path:
     sys.path.insert(0, str(backend_dir))
 
+# Ensure high-entropy JWT_SECRET exists in environment prior to app import
+if not os.getenv("JWT_SECRET") or len(os.getenv("JWT_SECRET", "")) < 32:
+    os.environ["JWT_SECRET"] = "test_jwt_secret_key_minimum_32_characters_for_unit_tests"
+
 from fastapi.testclient import TestClient
-from main import app, create_jwt_token
+from main import app, create_jwt_token, validate_jwt_secret
 
 client = TestClient(app)
+
+def test_jwt_secret_validation_rejects_missing_or_short():
+    with pytest.raises(RuntimeError, match=">=32 chars"):
+        validate_jwt_secret(None)
+
+    with pytest.raises(RuntimeError, match=">=32 chars"):
+        validate_jwt_secret("")
+
+    with pytest.raises(RuntimeError, match=">=32 chars"):
+        validate_jwt_secret("short_key_under_32_chars")
+
+def test_jwt_secret_validation_accepts_valid_length():
+    valid_key = "a" * 32
+    assert validate_jwt_secret(valid_key) == valid_key
+
+    longer_key = "secure_random_production_secret_key_64_characters_long_entropy_ok"
+    assert validate_jwt_secret(longer_key) == longer_key
 
 def test_api_me_valid_token():
     payload = {

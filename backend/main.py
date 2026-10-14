@@ -18,13 +18,15 @@ from pydantic import BaseModel
 # Load environment variables
 load_dotenv()
 
-_ENV = os.getenv("ENVIRONMENT", "development").lower()
-JWT_SECRET = os.getenv("JWT_SECRET", "supersecretkey_change_in_production_32chars_min")  # nosec B105
-if _ENV == "production" and (not JWT_SECRET or len(JWT_SECRET) < 32 or JWT_SECRET.startswith("supersecretkey")):
-    raise RuntimeError(
-        "CRITICAL SECURITY CONFIGURATION: In production, JWT_SECRET must be explicitly set "
-        "to a high-entropy secret (at least 32 characters)."
-    )
+def validate_jwt_secret(secret: Optional[str]) -> str:
+    if not secret or len(secret) < 32:
+        raise RuntimeError(
+            "JWT_SECRET must be set to a high-entropy value (>=32 chars). "
+            "Do NOT use a default secret in production."
+        )
+    return secret
+
+JWT_SECRET = validate_jwt_secret(os.getenv("JWT_SECRET"))
 
 logger = logging.getLogger("drch.backend")
 logging.basicConfig(level=logging.INFO)
