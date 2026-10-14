@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ResQProvider, useResQ } from "../../context/ResQContext";
 import { PortalRoleCategory, UserProfile } from "../../types/resq";
 import { DEMO_USERS } from "../../services/resqStorage";
+import { backendLogin, checkBackendHealth } from "../../services/authApi";
 
 function LoginPageContent() {
   const router = useRouter();
@@ -17,22 +18,29 @@ function LoginPageContent() {
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [backendConnected, setBackendConnected] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    checkBackendHealth().then((isHealthy) => setBackendConnected(isHealthy));
+  }, []);
 
   const handleCategoryChange = (cat: PortalRoleCategory) => {
     setSelectedCategory(cat);
     setErrorMsg(null);
   };
 
-  const handleQuickDemoLogin = (user: UserProfile) => {
+  const handleQuickDemoLogin = async (user: UserProfile) => {
     setErrorMsg(null);
     setSuccessMsg(`Signing in as ${user.name} (${user.role})...`);
+    // Attempt backend sync in background
+    backendLogin(user.email, user.password || "").catch(() => {});
     setTimeout(() => {
       login(user);
       router.push("/");
     }, 450);
   };
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
 
@@ -44,28 +52,55 @@ function LoginPageContent() {
       return;
     }
 
-    const found = allUsers.find(
+    // Find in local memory / storage
+    const localMatch = allUsers.find(
       (u) =>
         u.email.toLowerCase() === identifier ||
         u.id.toLowerCase() === identifier ||
         (u.badgeNumber && u.badgeNumber.toLowerCase() === identifier)
     );
 
-    if (!found) {
-      setErrorMsg(`No account found matching "${identifier}". You can use the Quick Demo buttons below or Sign Up.`);
+    // 1. Attempt Backend API Authentication (sharing profile info if recognized locally)
+    const apiRes = await backendLogin(
+      identifier,
+      password,
+      localMatch
+        ? {
+            role: localMatch.role,
+            name: localMatch.name,
+            agency: localMatch.agency,
+          }
+        : undefined
+    );
+
+    if (apiRes.success && apiRes.user) {
+      setSuccessMsg(`✓ Authenticated via FastAPI Gateway! Welcome back, ${apiRes.user.name}!`);
+      setTimeout(() => {
+        login(apiRes.user!);
+        router.push("/");
+      }, 400);
       return;
     }
 
-    if (found.password && password && found.password !== password) {
-      setErrorMsg("Incorrect password. Try using the 1-Click Quick Login below.");
+    // 2. Seamless Local Fallback (Guarantees zero downtime if backend is offline or syncing)
+    if (localMatch) {
+      if (localMatch.password && password && localMatch.password !== password) {
+        setErrorMsg("Incorrect password. Try using the 1-Click Quick Login below.");
+        return;
+      }
+      setSuccessMsg(`Welcome back, ${localMatch.name}! Loading ${localMatch.role} dashboard...`);
+      setTimeout(() => {
+        login(localMatch);
+        router.push("/");
+      }, 400);
       return;
     }
 
-    setSuccessMsg(`Welcome back, ${found.name}! Loading ${found.role} dashboard...`);
-    setTimeout(() => {
-      login(found);
-      router.push("/");
-    }, 400);
+    // 3. Neither backend nor local matched
+    setErrorMsg(
+      apiRes.error ||
+        `No account found matching "${identifier}". You can use the Quick Demo buttons below or Sign Up.`
+    );
   };
 
   const demoPresets = DEMO_USERS.filter((u) => {
@@ -102,12 +137,26 @@ function LoginPageContent() {
           </div>
         </Link>
 
-        <Link
-          href="/"
-          className="text-xs bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-full transition flex items-center gap-1.5"
-        >
-          <span>←</span> Return to General Dashboard
-        </Link>
+        <div className="flex items-center gap-3">
+          {backendConnected !== null && (
+            <span
+              className={`text-[10px] px-2.5 py-1 rounded-full font-medium border flex items-center gap-1.5 ${
+                backendConnected
+                  ? "bg-emerald-950/70 text-emerald-300 border-emerald-500/50"
+                  : "bg-amber-950/70 text-amber-300 border-amber-500/50"
+              }`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${backendConnected ? "bg-emerald-400" : "bg-amber-400"}`}></span>
+              {backendConnected ? "FastAPI Online" : "Offline Demo"}
+            </span>
+          )}
+          <Link
+            href="/"
+            className="text-xs bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-full transition flex items-center gap-1.5"
+          >
+            <span>←</span> Return to General Dashboard
+          </Link>
+        </div>
       </header>
 
       {/* Main Container */}
