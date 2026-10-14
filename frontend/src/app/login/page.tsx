@@ -137,12 +137,26 @@ function LoginPageContent() {
           </div>
         </Link>
 
-        <Link
-          href="/"
-          className="text-xs bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-full transition flex items-center gap-1.5"
-        >
-          <span>←</span> Return to General Dashboard
-        </Link>
+        <div className="flex items-center gap-3">
+          {backendConnected !== null && (
+            <span
+              className={`text-[10px] px-2.5 py-1 rounded-full font-medium border flex items-center gap-1.5 ${
+                backendConnected
+                  ? "bg-emerald-950/70 text-emerald-300 border-emerald-500/50"
+                  : "bg-amber-950/70 text-amber-300 border-amber-500/50"
+              }`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${backendConnected ? "bg-emerald-400" : "bg-amber-400"}`}></span>
+              {backendConnected ? "FastAPI Online" : "Offline Demo"}
+            </span>
+          )}
+          <Link
+            href="/"
+            className="text-xs bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-full transition flex items-center gap-1.5"
+          >
+            <span>←</span> Return to General Dashboard
+          </Link>
+        </div>
       </header>
 
       {/* Main Container */}

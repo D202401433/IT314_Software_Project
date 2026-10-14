@@ -46,3 +46,8 @@ def test_api_me_missing_token():
     response = client.get("/api/auth/me")
     assert response.status_code == 401
     assert "Missing or invalid Bearer authorization header" in response.json()["detail"]
+
+def test_api_me_empty_bearer_token():
+    response = client.get("/api/auth/me", headers={"Authorization": "Bearer "})
+    assert response.status_code == 401
+    assert "Missing Bearer token" in response.json()["detail"]

@@ -18,7 +18,13 @@ from pydantic import BaseModel
 # Load environment variables
 load_dotenv()
 
+_ENV = os.getenv("ENVIRONMENT", "development").lower()
 JWT_SECRET = os.getenv("JWT_SECRET", "supersecretkey_change_in_production_32chars_min")  # nosec B105
+if _ENV == "production" and (not JWT_SECRET or len(JWT_SECRET) < 32 or JWT_SECRET.startswith("supersecretkey")):
+    raise RuntimeError(
+        "CRITICAL SECURITY CONFIGURATION: In production, JWT_SECRET must be explicitly set "
+        "to a high-entropy secret (at least 32 characters)."
+    )
 
 logger = logging.getLogger("drch.backend")
 logging.basicConfig(level=logging.INFO)
@@ -51,13 +57,25 @@ def verify_jwt_token(token: str, secret: str = JWT_SECRET) -> dict:
     expected_sig = b64_url_encode(hmac.new(secret.encode(), signing_input, hashlib.sha256).digest())  # nosec B324
     if not hmac.compare_digest(sig_str, expected_sig):
         raise ValueError("JWT signature verification failed")
-    payload = json.loads(b64_url_decode(p_str).decode())
+    try:
+        raw_payload = b64_url_decode(p_str).decode("utf-8")
+        payload = json.loads(raw_payload)
+    except Exception as e:
+        raise ValueError(f"Malformed JWT payload: {e}") from e
+    if not isinstance(payload, dict):
+        raise ValueError("JWT payload must be a JSON object")
     if "exp" in payload and payload["exp"] < time.time():
         raise ValueError("JWT token has expired")
     return payload
 
 # ==============================================================================
 # In-Memory & Persistent Demo Users Repository (Matches DRCH Roles 1-to-1)
+#
+# ARCHITECTURAL NOTICE (Production Hardening Roadmap):
+# - This static fixture serves development, testing, and live emergency simulations.
+# - TODO (SEC-01): Before production release, migrate all authentication to the
+#   PostgreSQL user_auth table using Argon2id/bcrypt hashed passwords.
+# - TODO (SEC-02): Gate demo fixtures behind ENABLE_DEMO_ACCOUNTS=true (fail-closed in prod).
 # ==============================================================================
 DEMO_USERS = [
     {
@@ -473,7 +491,12 @@ def api_me(authorization: Optional[str] = Header(None)):
             detail="Missing or invalid Bearer authorization header",
         )
 
-    token = authorization.split(" ")[1]
+    token = authorization[7:].strip()
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing Bearer token",
+        )
     try:
         payload = verify_jwt_token(token)
     except (ValueError, binascii.Error) as e:

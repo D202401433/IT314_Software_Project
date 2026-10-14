@@ -151,21 +151,6 @@ function ResQGeoPortalInner() {
     return () => clearTimeout(fadeTimer);
   }, []);
 
-  // Helper to load Leaflet from CDN
-  const loadScript = useCallback((src: string): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      if (document.querySelector(`script[src="${src}"]`)) {
-        resolve();
-        return;
-      }
-      const script = document.createElement("script");
-      script.src = src;
-      script.async = true;
-      script.onload = () => resolve();
-      script.onerror = () => reject(new Error(`Failed to load ${src}`));
-      document.head.appendChild(script);
-    });
-  }, []);
 
   // Fetch real-world place name on zoom/move (0 API keys required)
   const fetchRealPlaceName = useCallback(async (lat: number, lon: number, zoom: number) => {
