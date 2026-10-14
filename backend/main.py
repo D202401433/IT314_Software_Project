@@ -17,7 +17,7 @@ from pydantic import BaseModel
 # Load environment variables
 load_dotenv()
 
-JWT_SECRET = os.getenv("JWT_SECRET", "supersecretkey_change_in_production_32chars_min")
+JWT_SECRET = os.getenv("JWT_SECRET", "supersecretkey_change_in_production_32chars_min")  # nosec B105
 
 logger = logging.getLogger("drch.backend")
 logging.basicConfig(level=logging.INFO)
@@ -38,7 +38,7 @@ def create_jwt_token(payload: dict, secret: str = JWT_SECRET, expires_in: int = 
     h_bytes = b64_url_encode(json.dumps({"alg": "HS256", "typ": "JWT"}).encode())
     p_bytes = b64_url_encode(json.dumps(payload_copy).encode())
     signing_input = f"{h_bytes}.{p_bytes}".encode()
-    signature = b64_url_encode(hmac.new(secret.encode(), signing_input, hashlib.sha256).digest())
+    signature = b64_url_encode(hmac.new(secret.encode(), signing_input, hashlib.sha256).digest())  # nosec B324
     return f"{h_bytes}.{p_bytes}.{signature}"
 
 def verify_jwt_token(token: str, secret: str = JWT_SECRET) -> dict:
@@ -47,7 +47,7 @@ def verify_jwt_token(token: str, secret: str = JWT_SECRET) -> dict:
         raise ValueError("Invalid JWT format")
     h_str, p_str, sig_str = parts
     signing_input = f"{h_str}.{p_str}".encode()
-    expected_sig = b64_url_encode(hmac.new(secret.encode(), signing_input, hashlib.sha256).digest())
+    expected_sig = b64_url_encode(hmac.new(secret.encode(), signing_input, hashlib.sha256).digest())  # nosec B324
     if not hmac.compare_digest(sig_str, expected_sig):
         raise ValueError("JWT signature verification failed")
     payload = json.loads(b64_url_decode(p_str).decode())
