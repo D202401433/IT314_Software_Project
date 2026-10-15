@@ -150,6 +150,18 @@ def test_idempotency_key_prevents_duplicate_dispatch(client, make, sql):
     assert sql.execute("SELECT quantity_available FROM resources WHERE resource_id = %s",
                        (supply["resource_id"],)).fetchone()["quantity_available"] == 4
 
+    # Reusing the same key on a different incident must fail with 409 IDEMPOTENCY_CONFLICT
+    other_inc = _verified(make)
+    other_dispatch = _dispatch(client, dispatcher, other_inc, agency, [(supply, 1)], key=key)
+    assert other_dispatch.status_code == 409
+    assert other_dispatch.json()["error"]["code"] == "IDEMPOTENCY_CONFLICT"
+
+    # Reusing the same key on the same incident with mismatched agency must also fail
+    other_agency = make.agency()
+    conflict_dispatch = _dispatch(client, dispatcher, inc, other_agency, [(supply, 1)], key=key)
+    assert conflict_dispatch.status_code == 409
+    assert conflict_dispatch.json()["error"]["code"] == "IDEMPOTENCY_CONFLICT"
+
 
 def test_escalation_permission_and_automatic_timeout(client, make, sql):
     from app.services.dispatch import escalate_overdue

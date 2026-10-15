@@ -94,10 +94,28 @@ def create_dispatch(
     with db.transaction() as conn:
         if idempotency_key:
             existing = conn.execute(
-                "SELECT dispatch_id FROM dispatch_orders WHERE idempotency_key = %s", (idempotency_key,)
+                """
+                SELECT dispatch_id, incident_id, receiving_agency_id, instructions, priority
+                FROM dispatch_orders
+                WHERE idempotency_key = %s
+                """,
+                (idempotency_key,),
             ).fetchone()
             if existing:
-                # A retry with the same key returns the original order, never a duplicate.
+                # Idempotency must be scoped to the same incident.
+                if existing["incident_id"] != incident_id:
+                    raise conflict(
+                        "IDEMPOTENCY_CONFLICT",
+                        "Idempotency-Key already used for a dispatch on a different incident",
+                        {"incident_id": str(existing["incident_id"])},
+                    )
+                # Verify that request semantics match the original dispatch order.
+                if existing["receiving_agency_id"] != body.receiving_agency_id:
+                    raise conflict(
+                        "IDEMPOTENCY_CONFLICT",
+                        "Idempotency-Key reused with different receiving agency",
+                    )
+                # A retry with the same key for the same incident returns the original order.
                 return JSONResponse(status_code=200, content=jsonable_encoder(_fetch(conn, existing["dispatch_id"])))
         incident = lock_incident(conn, incident_id)
         ensure_open(incident)

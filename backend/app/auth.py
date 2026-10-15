@@ -6,6 +6,7 @@ Role and permissions are always resolved from the database on each request
 
 import uuid
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import Depends, Request
@@ -58,6 +59,7 @@ def load_principal(
             row is None
             or row["status"] != "ACTIVE"
             or row["token_version"] != token_version
+            or (row["locked_until"] is not None and row["locked_until"] > datetime.now(UTC))
         ):
             return None
         permissions: frozenset[str] = frozenset()

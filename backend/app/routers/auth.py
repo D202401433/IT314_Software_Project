@@ -57,7 +57,13 @@ def _register_failure(conn, account, ip: str | None, reason: str) -> None:
     attempts = account["failed_login_count"] + 1
     if attempts >= settings.login_max_attempts:
         conn.execute(
-            "UPDATE user_auth SET failed_login_count = 0, locked_until = %s WHERE user_id = %s",
+            """
+            UPDATE user_auth
+            SET failed_login_count = 0,
+                locked_until = %s,
+                token_version = token_version + 1
+            WHERE user_id = %s
+            """,
             (datetime.now(UTC) + timedelta(minutes=settings.lockout_minutes), account["user_id"]),
         )
         reason += "; account locked"

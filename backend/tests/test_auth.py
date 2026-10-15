@@ -44,13 +44,28 @@ def test_wrong_password_and_unknown_email_look_identical(client, make):
 
 
 def test_lockout_after_repeated_failures(client, make):
-    user = make.user()
+    user = make.user("DISASTER_MGMT", ["DISPATCH"])
+    # First, log in legitimately and obtain an active token
+    login_res = _login(client, user["email"], user["password"])
+    code = pyotp.TOTP(user["totp_secret"]).now()
+    ok = client.post("/api/v1/auth/mfa/verify", json={"mfa_token": login_res.json()["mfa_token"], "code": code})
+    token = ok.json()["access_token"]
+    # Token works initially
+    me = client.get("/api/v1/me", headers={"Authorization": f"Bearer {token}"})
+    assert me.status_code == 200
+
+    # Trigger lockout
     for _ in range(5):
         _login(client, user["email"], "wrong")
+
     # Even the right password is refused while locked, with the same generic error.
     locked = _login(client, user["email"], user["password"])
     assert locked.status_code == 401
     assert locked.json()["error"]["code"] == "INVALID_CREDENTIALS"
+
+    # Existing token must now be rejected because user is locked out and token_version rotated
+    blocked = client.get("/api/v1/me", headers={"Authorization": f"Bearer {token}"})
+    assert blocked.status_code == 401
 
 
 def test_staff_without_mfa_cannot_sign_in(client, make):
