@@ -217,7 +217,7 @@ function ResQGeoPortalInner() {
           inertiaDeceleration: 3000,
           inertiaMaxSpeed: 2000,
           easeLinearity: 0.22,
-        }).setView([22, 78], 3);
+        }).setView([22.6, 79.1], 5);
 
         mapRef.current = map;
 
@@ -931,7 +931,7 @@ function ResQGeoPortalInner() {
         </div>
       )}
       {/* ============ HEADER (ResQ Bhuvan-Style) ============ */}
-      <header className="fixed top-0 left-0 right-0 h-12 z-[1000] bg-[#0c4a75] flex items-center justify-between px-3.5 text-white shadow-md border-b border-[#093554]">
+      <header className="fixed top-3 left-3 right-3 h-12 z-[1000] rounded-2xl bg-slate-950/90 backdrop-blur-xl flex items-center justify-between px-3 text-white shadow-2xl border border-white/10">
         <div className="flex items-center gap-2.5">
           <div
             onClick={() => mapRef.current?.flyTo([23.5, 80.5], 5, { duration: 3, easeLinearity: 0.22 })}
@@ -946,19 +946,19 @@ function ResQGeoPortalInner() {
 
           <div>
             <div className="flex items-baseline gap-1.5 leading-tight">
-              <span className="text-[20px] font-extrabold tracking-tight text-white">ResQ</span>
-              <span className="text-[13px] font-light tracking-wide text-sky-200">GeoPlatform</span>
+              <span className="text-[18px] font-extrabold tracking-tight text-white">ResQ</span>
+              <span className="hidden sm:inline text-[12px] font-medium tracking-wide text-sky-300">Operations</span>
               <span className="hidden md:inline-block text-[10px] uppercase font-semibold bg-sky-900/90 text-sky-200 px-1.5 py-0.5 rounded ml-1 border border-sky-700/50">
                 NDMA Command & Triage GIS
               </span>
             </div>
-            <div className="text-[9.5px] font-normal text-sky-200 opacity-90 leading-none">
+            <div className="hidden lg:block text-[9px] font-medium text-slate-400 leading-none">
               Disaster Response Coordination Hub • Real-Time Emergency Operations
             </div>
           </div>
         </div>
 
-        <nav className="flex items-center gap-2.5 text-[13px]">
+        <nav className="flex items-center gap-1.5 text-[13px]">
           {/* Dashboard Panel Toggle */}
           <button
             onClick={() => setShowDashboard((prev) => !prev)}
@@ -976,7 +976,7 @@ function ResQGeoPortalInner() {
           {!isAuthenticated ? (
             <>
               {/* Quick Role Switcher Pills for Instant Testing */}
-              <div className="hidden xl:flex items-center gap-1.5 bg-slate-900/80 p-1 rounded-full border border-sky-800/50">
+              <div className="hidden items-center gap-1.5 bg-slate-900/80 p-1 rounded-full border border-sky-800/50">
                 <span className="text-[10px] text-sky-300 font-bold px-2 uppercase tracking-wider">Preview View:</span>
                 <button
                   onClick={() => switchRole("Public / Citizen")}
@@ -1011,7 +1011,7 @@ function ResQGeoPortalInner() {
                 title="Sign In or Register"
               >
                 <span>🔐</span>
-                <span>Sign In / Register</span>
+                <span>Sign in</span>
               </button>
             </>
           ) : (
@@ -1211,7 +1211,7 @@ function ResQGeoPortalInner() {
       </header>
 
       {/* ============ SEARCH PANEL ============ */}
-      <div className="fixed top-[58px] left-3 z-[900] flex items-center bg-white rounded-full shadow-lg border border-slate-200/80 overflow-hidden backdrop-blur-sm">
+      <div className="fixed top-[72px] left-5 z-[900] flex items-center bg-white/95 rounded-2xl shadow-xl border border-slate-200/80 overflow-hidden backdrop-blur-sm">
         <button
           onClick={() => setShowNavDrawer(true)}
           title="Open Portal Navigation Menu"
@@ -1226,7 +1226,7 @@ function ResQGeoPortalInner() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search city, district, village, or coordinates..."
-            className="w-64 sm:w-80 px-2 py-2 text-sm text-slate-800 placeholder-slate-400 outline-none bg-transparent"
+            className="w-52 sm:w-72 px-2 py-2.5 text-sm text-slate-800 placeholder-slate-400 outline-none bg-transparent"
           />
           <button
             type="submit"
@@ -1245,7 +1245,7 @@ function ResQGeoPortalInner() {
             alert("Voice Search: Please speak destination or incident area.");
           }}
           title="Voice Search"
-          className="p-2.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-sm cursor-pointer"
+          className="hidden p-2.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-sm cursor-pointer"
         >
           🎙️
         </button>
@@ -1317,7 +1317,7 @@ function ResQGeoPortalInner() {
       )}
 
       {/* ============ 1-CLICK SATELLITE ⇄ STREETS QUICK SWITCHER ============ */}
-      <div className="fixed bottom-12 left-3 z-[900] flex items-center gap-2">
+      <div className="fixed bottom-5 left-5 z-[900] flex items-center gap-2">
         <button
           onClick={toggleSatelliteOrStreets}
           className="flex items-center gap-2 bg-white/95 hover:bg-white text-slate-800 text-xs font-semibold px-3 py-2 rounded-lg shadow-lg border border-slate-300 backdrop-blur transition-all hover:scale-105 cursor-pointer"
@@ -1329,7 +1329,7 @@ function ResQGeoPortalInner() {
 
         <button
           onClick={toggleStreetOverlay}
-          className={`px-2.5 py-2 rounded-lg text-xs font-medium border shadow backdrop-blur transition-colors cursor-pointer ${
+          className={`hidden px-2.5 py-2 rounded-lg text-xs font-medium border shadow backdrop-blur transition-colors cursor-pointer ${
             streetOverlayActive
               ? "bg-sky-100 text-sky-800 border-sky-300"
               : "bg-white/90 text-slate-600 border-slate-200"
@@ -1357,7 +1357,7 @@ function ResQGeoPortalInner() {
       )}
 
       {/* ============ RIGHT TOOL STRIP ============ */}
-      <div className="fixed right-3 top-1/2 -translate-y-1/2 z-[900] flex flex-col gap-2">
+      <div className="fixed right-5 top-1/2 -translate-y-1/2 z-[900] flex flex-col gap-1.5 rounded-2xl bg-white/90 p-1.5 shadow-xl border border-slate-200/80 backdrop-blur">
         <button
           onClick={handleFullscreen}
           title="Toggle Fullscreen"
@@ -1421,7 +1421,7 @@ function ResQGeoPortalInner() {
       </div>
 
       {/* ============ BOTTOM STATUS & AREA ============ */}
-      <div className="fixed bottom-2.5 left-1/2 -translate-x-1/2 z-[900] flex flex-col sm:flex-row items-center gap-2 bg-slate-900/90 backdrop-blur text-white text-[12px] px-3.5 py-1.5 rounded-lg shadow-xl border border-slate-700/60 pointer-events-none">
+      <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[900] hidden sm:flex items-center gap-2 bg-slate-950/85 backdrop-blur text-white text-[11px] px-3 py-1.5 rounded-full shadow-xl border border-white/10 pointer-events-none">
         <div className="flex items-center gap-1.5 text-sky-300 font-semibold">
           <span>📍 Viewing:</span>
           <span className="text-white font-normal truncate max-w-xs sm:max-w-md">{visibleAreaName}</span>
