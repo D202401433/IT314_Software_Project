@@ -93,3 +93,60 @@ body {
 .leaflet-popup-tip {
   background: rgba(255, 255, 255, 0.96);
 }
+
+/* ============ CITIZEN COMPACT BLUE MAP THEME ============ */
+.citizen-compact-blue-map {
+  background-color: #070d18 !important;
+}
+
+.citizen-compact-blue-map .leaflet-tile-pane {
+  /* Subtle cooling and contrast: light-blue water, cool light-gray land, high-contrast labels */
+  filter: saturate(0.85) contrast(1.06) brightness(0.99);
+}
+
+.citizen-compact-blue-map .leaflet-container {
+  background: #070d18 !important;
+  font-family: inherit;
+}
+
+.citizen-compact-blue-map .leaflet-control-zoom {
+  border: 1.5px solid #0284c7 !important;
+  border-radius: 8px !important;
+  overflow: hidden !important;
+  box-shadow: 0 4px 14px rgba(7, 13, 24, 0.6) !important;
+}
+
+.citizen-compact-blue-map .leaflet-control-zoom a {
+  background-color: #0c4a75 !important;
+  color: #38bdf8 !important;
+  border-bottom: 1px solid #0284c7 !important;
+  transition: all 0.15s ease !important;
+  font-weight: bold !important;
+}
+
+.citizen-compact-blue-map .leaflet-control-zoom a:hover {
+  background-color: #0284c7 !important;
+  color: #ffffff !important;
+}
+
+.citizen-compact-blue-map .leaflet-popup-content-wrapper {
+  background-color: #0b1324 !important;
+  color: #f8fafc !important;
+  border: 1.5px solid #0284c7 !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 24px rgba(2, 132, 199, 0.4) !important;
+}
+
+.citizen-compact-blue-map .leaflet-popup-tip {
+  background-color: #0b1324 !important;
+}
+
+.citizen-compact-blue-map .leaflet-popup-close-button {
+  color: #94a3b8 !important;
+  padding: 4px 6px 0 0 !important;
+}
+
+.citizen-compact-blue-map .leaflet-popup-close-button:hover {
+  color: #38bdf8 !important;
+}
+

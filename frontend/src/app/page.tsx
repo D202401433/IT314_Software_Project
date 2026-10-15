@@ -125,6 +125,7 @@ function ResQGeoPortalInner() {
   const [showSplash, setShowSplash] = useState(true);
   const [splashFading, setSplashFading] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
+  const [citizenViewPublicMap, setCitizenViewPublicMap] = useState(false);
 
   // Auth & Role Modals visibility
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -802,6 +803,25 @@ function ResQGeoPortalInner() {
 
   const isCurrentLayerSatellite = TILE_LAYERS[currentBaseLayer].isSatellite;
 
+  // Post-login Citizen experience: Functionality-first, no full-screen map background
+  if (isAuthenticated && roleCategory === "user" && !citizenViewPublicMap) {
+    return (
+      <>
+        <CitizenDashboardView
+          onOpenCitizenReport={() => setShowCitizenReport(true)}
+          onViewPublicMap={() => setCitizenViewPublicMap(true)}
+          onSignOut={() => logout()}
+        />
+        {showCitizenReport && (
+          <CitizenReportModal
+            isOpen={showCitizenReport}
+            onClose={() => setShowCitizenReport(false)}
+          />
+        )}
+      </>
+    );
+  }
+
   return (
     <div className="relative w-screen h-screen overflow-hidden select-none font-sans bg-slate-900 text-slate-800">
 
@@ -1033,7 +1053,13 @@ function ResQGeoPortalInner() {
             <>
               {/* Active Role Workspace Button */}
               <button
-                onClick={() => setShowRoleWorkspace(true)}
+                onClick={() => {
+                  if (roleCategory === "user") {
+                    setCitizenViewPublicMap(false);
+                  } else {
+                    setShowRoleWorkspace(true);
+                  }
+                }}
                 className={`bg-slate-900/90 hover:bg-slate-900 border px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 shadow-sm transition ${
                   roleCategory === "user"
                     ? "border-sky-500/70 text-sky-200"
@@ -1223,6 +1249,19 @@ function ResQGeoPortalInner() {
           </select>
         </nav>
       </header>
+
+      {/* ============ RETURN TO CITIZEN DASHBOARD (When citizen views public map) ============ */}
+      {isAuthenticated && roleCategory === "user" && citizenViewPublicMap && (
+        <div className="fixed top-14 left-1/2 -translate-x-1/2 z-[1100] bg-[#0c4a75] border border-sky-400 text-white px-4 py-1.5 rounded-full shadow-2xl flex items-center gap-3 text-xs animate-fadeIn">
+          <span>🗺️ Viewing National Bhuvan Map</span>
+          <button
+            onClick={() => setCitizenViewPublicMap(false)}
+            className="bg-sky-500 hover:bg-sky-400 text-white font-bold px-3 py-0.5 rounded-full text-xs transition cursor-pointer shadow-xs"
+          >
+            ← Back to Citizen Dashboard
+          </button>
+        </div>
+      )}
 
       {/* ============ SEARCH PANEL ============ */}
       <div className="fixed top-[58px] left-3 z-[900] flex items-center bg-white rounded-full shadow-lg border border-slate-200/80 overflow-hidden backdrop-blur-sm">
