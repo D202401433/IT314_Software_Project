@@ -45,12 +45,11 @@ To run the API outside Docker instead: `cd backend && python -m venv .venv && .v
 | Name | Used by | Purpose |
 |---|---|---|
 | `DATABASE_URL` | backend | PostgreSQL connection |
-| `JWT_SECRET` | backend | Signs access tokens (32+ characters; replace the example value in production) |
-| `MFA_ENCRYPTION_KEY` | backend | Fernet key that encrypts TOTP secrets at rest. Rotating it invalidates enrolled MFA |
-| `DISPATCH_ACK_TIMEOUT_MINUTES` | backend | Unacknowledged dispatches escalate after this (default 15) |
-| `AI_TRIAGE_URL` | backend | Optional external triage service. Empty means AI is reported unavailable |
-| `ACCESS_TOKEN_MINUTES`, `LOGIN_MAX_ATTEMPTS`, `LOGIN_LOCKOUT_MINUTES`, `AI_LOW_CONFIDENCE_THRESHOLD` | backend | Optional tuning (defaults 60, 5, 15, 0.6) |
-| `API_URL` | frontend (server only) | Backend base URL for the Next.js server. Never sent to the browser |
+| `JWT_SECRET` | backend | Signs access tokens (32+ characters) and automatically derives the MFA secret encryption key if `MFA_ENCRYPTION_KEY` is not explicitly set |
+| `MFA_ENCRYPTION_KEY` | backend (optional) | Optional custom Fernet key that encrypts TOTP secrets at rest. Defaults to key derived from `JWT_SECRET` |
+| `DISPATCH_ACK_TIMEOUT_MINUTES` | backend (optional) | Unacknowledged dispatches escalate after this (defaults to 15) |
+| `AI_TRIAGE_URL` | backend (optional) | Optional external triage service. Empty/omitted means AI is reported unavailable |
+| `API_URL` | frontend (optional) | Optional custom backend URL for Next.js server-side requests (defaults to `http://localhost:8000`) |
 
 ## Architecture
 

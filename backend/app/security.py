@@ -73,7 +73,15 @@ def decode_token(token: str, purpose: str) -> dict | None:
 
 
 def _fernet() -> Fernet:
-    return Fernet(get_settings().require("mfa_encryption_key").encode())
+    key = get_settings().mfa_encryption_key
+    if not key:
+        # Derive a stable 32-byte Fernet key from JWT_SECRET when explicit key is omitted
+        import base64
+        import hashlib
+
+        secret_bytes = _secret().encode()
+        key = base64.urlsafe_b64encode(hashlib.sha256(secret_bytes).digest()).decode()
+    return Fernet(key.encode())
 
 
 def new_totp_secret() -> str:

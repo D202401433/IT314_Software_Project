@@ -86,9 +86,6 @@ services:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres-postgis:5432/${POSTGRES_DB:-drch_db}
       - REDIS_URL=redis://redis:6379/0
       - JWT_SECRET=${JWT_SECRET}
-      - MFA_ENCRYPTION_KEY=${MFA_ENCRYPTION_KEY}
-      - DISPATCH_ACK_TIMEOUT_MINUTES=${DISPATCH_ACK_TIMEOUT_MINUTES:-15}
-      - AI_TRIAGE_URL=${AI_TRIAGE_URL:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - HUGGINGFACE_API_KEY=${HUGGINGFACE_API_KEY:-}
     depends_on:
