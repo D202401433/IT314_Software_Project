@@ -1,12 +1,13 @@
 name: Continuous Integration (CI)
 
 on:
+  push:
+    branches-ignore: [ "main" ]
   pull_request:
-    branches: [ "main" ]
   workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
