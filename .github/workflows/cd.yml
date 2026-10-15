@@ -198,7 +198,7 @@ jobs:
       - name: Trigger Vercel Production Deployment (Frontend Only)
         if: ${{ needs.detect-changes.outputs.frontend == 'true' || github.event_name == 'workflow_dispatch' }}
         env:
-          VERCEL_HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
+          VERCEL_HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
         run: |
           if [ -n "$VERCEL_HOOK" ]; then
             echo "🚀 Triggering Vercel frontend deployment..."
@@ -206,16 +206,16 @@ jobs:
             if [ "$response" -ge 200 ] && [ "$response" -lt 300 ]; then
               echo "✅ Successfully dispatched Vercel build (HTTP $response)."
             else
-              echo "⚠️ Vercel hook responded with HTTP $response. Please check secret VERCEL_DEPLOY_HOOK_URL."
+              echo "⚠️ Vercel hook responded with HTTP $response. Please check secret VERCEL_DEPLOY_HOOK."
             fi
           else
-            echo "ℹ️ VERCEL_DEPLOY_HOOK_URL secret not set. Skipping Vercel trigger."
+            echo "ℹ️ VERCEL_DEPLOY_HOOK secret not set. Skipping Vercel trigger."
           fi
 
       - name: Trigger Render Production Deployment (Backend Only)
         if: ${{ needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.ai-workers == 'true' || github.event_name == 'workflow_dispatch' }}
         env:
-          RENDER_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+          RENDER_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
         run: |
           if [ -n "$RENDER_HOOK" ]; then
             echo "🚀 Triggering Render backend deployment..."
@@ -223,8 +223,8 @@ jobs:
             if [ "$response" -ge 200 ] && [ "$response" -lt 300 ]; then
               echo "✅ Successfully dispatched Render deployment (HTTP $response)."
             else
-              echo "⚠️ Render hook responded with HTTP $response. Please check secret RENDER_DEPLOY_HOOK_URL."
+              echo "⚠️ Render hook responded with HTTP $response. Please check secret RENDER_DEPLOY_HOOK."
             fi
           else
-            echo "ℹ️ RENDER_DEPLOY_HOOK_URL secret not set. Skipping Render trigger."
+            echo "ℹ️ RENDER_DEPLOY_HOOK secret not set. Skipping Render trigger."
           fi
