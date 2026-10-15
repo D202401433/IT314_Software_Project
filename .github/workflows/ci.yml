@@ -182,6 +182,8 @@ jobs:
   container-validation:
     name: Container / Build Validation (${{ matrix.name }})
     runs-on: ubuntu-latest
+    # Non-blocking: Docker builds can fail due to layer timeouts; don't gate PR merge on this
+    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:

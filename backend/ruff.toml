@@ -1,0 +1,5 @@
+# Same results whether ruff runs from the repository root (CI) or from backend/.
+line-length = 120
+
+[lint.isort]
+known-first-party = ["app", "main", "tests"]
