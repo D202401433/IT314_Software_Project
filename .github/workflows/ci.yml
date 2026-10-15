@@ -107,10 +107,13 @@ jobs:
 
       - name: Compile and apply schema migrations
         run: |
-          PGPASSWORD=postgres psql -h localhost -U postgres -d drch_test_db \
-            -f backend/db/migrations/01_schema.sql \
-            -v ON_ERROR_STOP=1
-          echo "Database schema compiled successfully with zero DDL or constraint errors."
+          for file in $(find backend/db/migrations -maxdepth 1 -name '*.sql' | sort -V); do
+            echo "Applying migration: $file"
+            PGPASSWORD=postgres psql -h localhost -U postgres -d drch_test_db \
+              -f "$file" \
+              -v ON_ERROR_STOP=1
+          done
+          echo "All database schema migrations compiled successfully with zero DDL or constraint errors."
         env:
           PGPASSWORD: postgres
 
@@ -244,15 +247,15 @@ jobs:
           echo "python-check:               ${{ needs.python-check.result }}"
           echo "database-schema-validation: ${{ needs.database-schema-validation.result }}"
           echo "backend-tests:              ${{ needs.backend-tests.result }}"
-          echo "container-validation:       ${{ needs.container-validation.result }} (non-blocking)"
+          echo "container-validation:       ${{ needs.container-validation.result }}"
           echo "======================"
 
           FAILED=""
-          # container-validation is non-blocking (continue-on-error: true), skip from gate
           [ "${{ needs.frontend-check.result }}" != "success" ] && FAILED="$FAILED frontend-check"
           [ "${{ needs.python-check.result }}" != "success" ] && FAILED="$FAILED python-check"
           [ "${{ needs.database-schema-validation.result }}" != "success" ] && FAILED="$FAILED database-schema-validation"
           [ "${{ needs.backend-tests.result }}" != "success" ] && FAILED="$FAILED backend-tests"
+          [ "${{ needs.container-validation.result }}" != "success" ] && FAILED="$FAILED container-validation"
 
           if [ -n "$FAILED" ]; then
             echo "CI check FAILED: the following job(s) did not succeed: $FAILED"
