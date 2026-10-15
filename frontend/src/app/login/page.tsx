@@ -1,18 +1,24 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ResQProvider, useResQ } from "../../context/ResQContext";
 import { PortalRoleCategory, UserProfile } from "../../types/resq";
 import { DEMO_USERS } from "../../services/resqStorage";
+import { StaffSignIn } from "./staff-sign-in";
 import { backendLogin, checkBackendHealth } from "../../services/authApi";
+
+// Administrator (Command & Dispatch) signs in against the backend; other tabs keep the demo flow.
+const usesStaffSignIn = (category: PortalRoleCategory): boolean => category === "admin";
 
 function LoginPageContent() {
   const router = useRouter();
   const { login, allUsers } = useResQ();
+  // Protected workspace redirects arrive as /login?next=/dm...; open the staff tab for them.
+  const next = useSearchParams().get("next") ?? undefined;
 
-  const [selectedCategory, setSelectedCategory] = useState<PortalRoleCategory>("user");
+  const [selectedCategory, setSelectedCategory] = useState<PortalRoleCategory>(next?.startsWith("/dm") ? "admin" : "user");
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -233,7 +239,8 @@ function LoginPageContent() {
             </div>
           </div>
 
-          {/* Quick 1-Click Demo */}
+          {/* Quick 1-Click Demo (not offered for Administrator: staff use real authentication) */}
+          {!usesStaffSignIn(selectedCategory) && (
           <div className="p-3 bg-slate-900/90 rounded-xl border border-slate-800">
             <div className="flex items-center justify-between mb-2">
               <span className="text-[11px] font-bold text-amber-400 flex items-center gap-1">
@@ -255,6 +262,7 @@ function LoginPageContent() {
               ))}
             </div>
           </div>
+          )}
 
           {errorMsg && (
             <div className="p-3 bg-red-950/80 border border-red-700/60 rounded-xl text-red-200 text-xs flex items-center gap-2">
@@ -270,6 +278,9 @@ function LoginPageContent() {
           )}
 
           {/* Form */}
+          {usesStaffSignIn(selectedCategory) ? (
+            <StaffSignIn next={next} />
+          ) : (
           <form onSubmit={handleLoginSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1">
@@ -318,6 +329,7 @@ function LoginPageContent() {
               <span>→</span>
             </button>
           </form>
+          )}
 
           {/* Footer Navigation */}
           <div className="pt-3 border-t border-slate-800 text-center text-xs text-slate-400 space-y-2">
@@ -347,7 +359,9 @@ function LoginPageContent() {
 export default function LoginPage() {
   return (
     <ResQProvider>
-      <LoginPageContent />
+      <Suspense fallback={null}>
+        <LoginPageContent />
+      </Suspense>
     </ResQProvider>
   );
 }

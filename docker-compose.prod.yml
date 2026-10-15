@@ -17,6 +17,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./backend/db/migrations/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - ./backend/db/migrations/02_dm_module.sql:/docker-entrypoint-initdb.d/03_dm_module.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-drch_db}"]
       interval: 10s
@@ -70,6 +71,7 @@ services:
       - PORT=3000
       - HOSTNAME=0.0.0.0
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      - API_URL=${API_URL:-http://backend:8000}
     depends_on:
       backend:
         condition: service_started

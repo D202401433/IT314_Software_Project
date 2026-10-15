@@ -17,6 +17,7 @@ services:
       - pgdata:/var/lib/postgresql/data
       - ./backend/db/migrations/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
       - ./backend/db/seeds/seed_data.sql:/docker-entrypoint-initdb.d/02_seed_data.sql
+      - ./backend/db/migrations/02_dm_module.sql:/docker-entrypoint-initdb.d/03_dm_module.sql
     restart: unless-stopped
 
   redis:
@@ -49,6 +50,7 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=development
+      - API_URL=http://backend:8000
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -66,7 +68,7 @@ services:
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@postgres-postgis:5432/${POSTGRES_DB:-drch_db}
       - REDIS_URL=redis://redis:6379/0
-      - JWT_SECRET=${JWT_SECRET:-dev_insecure_jwt_secret_key_minimum_32_characters_for_local_compose}
+      - JWT_SECRET=${JWT_SECRET}
     volumes:
       - ./backend:/app
     depends_on:

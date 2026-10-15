@@ -1,142 +1,138 @@
-import os
-import sys
-from pathlib import Path
+"""Authentication, MFA, lockout and role/permission enforcement."""
+
+import pyotp
 import pytest
 
-# Ensure backend root is on sys.path
-backend_dir = Path(__file__).resolve().parent.parent
-if str(backend_dir) not in sys.path:
-    sys.path.insert(0, str(backend_dir))
+pytestmark = pytest.mark.db
 
-# Ensure high-entropy JWT_SECRET exists in environment prior to app import
-if not os.getenv("JWT_SECRET") or len(os.getenv("JWT_SECRET", "")) < 32:
-    os.environ["JWT_SECRET"] = "test_jwt_secret_key_minimum_32_characters_for_unit_tests"
 
-from fastapi.testclient import TestClient
-from main import (
-    app,
-    create_jwt_token,
-    hash_password,
-    validate_jwt_secret,
-    verify_password,
-)
+def _login(client, email, password):
+    return client.post("/api/v1/auth/login", json={"email": email, "password": password})
 
-client = TestClient(app)
 
-def test_jwt_secret_validation_rejects_missing_or_short():
-    with pytest.raises(RuntimeError, match=">=32 chars"):
-        validate_jwt_secret(None)
+def test_database_health(client):
+    assert client.get("/api/v1/health").json()["database"] == "ok"
 
-    with pytest.raises(RuntimeError, match=">=32 chars"):
-        validate_jwt_secret("")
 
-    with pytest.raises(RuntimeError, match=">=32 chars"):
-        validate_jwt_secret("short_key_under_32_chars")
+def test_staff_login_requires_mfa_then_issues_token(client, make):
+    user = make.user("DISASTER_MGMT", ["DISPATCH"])
+    first = _login(client, user["email"], user["password"])
+    assert first.status_code == 200
+    assert first.json()["mfa_required"] is True
+    assert "access_token" not in first.json()
 
-def test_jwt_secret_validation_accepts_valid_length():
-    valid_key = "a" * 32
-    assert validate_jwt_secret(valid_key) == valid_key
+    bad = client.post("/api/v1/auth/mfa/verify", json={"mfa_token": first.json()["mfa_token"], "code": "000000"})
+    assert bad.status_code == 401
 
-    longer_key = "secure_random_production_secret_key_64_characters_long_entropy_ok"
-    assert validate_jwt_secret(longer_key) == longer_key
+    code = pyotp.TOTP(user["totp_secret"]).now()
+    ok = client.post("/api/v1/auth/mfa/verify", json={"mfa_token": first.json()["mfa_token"], "code": code})
+    assert ok.status_code == 200
+    token = ok.json()["access_token"]
+    me = client.get("/api/v1/me", headers={"Authorization": f"Bearer {token}"}).json()
+    assert me["role"] == "DISASTER_MGMT"
+    assert me["permissions"] == ["DISPATCH"]
+    assert me["mfa_verified"] is True
+    assert "password_hash" not in str(me) and "mfa_secret" not in str(me)
 
-def test_password_hashing_and_verification():
-    pwd = "secret_password_123"
-    hashed = hash_password(pwd)
-    assert hashed != pwd
-    assert len(hashed) == 64  # sha256 hex is 64 chars
-    assert verify_password(pwd, hashed) is True
-    assert verify_password("wrong_password", hashed) is False
-    assert verify_password("", hashed) is False
-    assert verify_password(pwd, "") is False
 
-def test_api_login_valid_credentials():
-    res = client.post(
-        "/api/auth/login",
-        json={"identifier": "commander@resq.gov.in", "password": "admin123password"},
-    )
-    assert res.status_code == 200
-    data = res.json()
-    assert data["success"] is True
-    assert "token" in data
-    assert "password" not in data["user"]
-    assert "password_hash" not in data["user"]
+def test_wrong_password_and_unknown_email_look_identical(client, make):
+    user = make.user()
+    a = _login(client, user["email"], "nope")
+    b = _login(client, "nobody@test.drch", "nope")
+    assert a.status_code == b.status_code == 401
+    assert a.json() == b.json()
 
-def test_api_login_invalid_password():
-    res = client.post(
-        "/api/auth/login",
-        json={"identifier": "commander@resq.gov.in", "password": "wrongpassword123"},
-    )
-    assert res.status_code == 401
-    assert "Incorrect password" in res.json()["detail"]
 
-def test_api_signup_and_login_flow():
-    signup_email = "volunteer_test_99@resq.gov.in"
-    signup_res = client.post(
-        "/api/auth/signup",
-        json={
-            "name": "Volunteer Test",
-            "email": signup_email,
-            "password": "volunteer_secure_password_123",
-            "role": "Public / Citizen",
-            "agency": "Independent Volunteer",
-        },
-    )
-    assert signup_res.status_code == 200
-    signup_data = signup_res.json()
-    assert signup_data["success"] is True
-    assert "password" not in signup_data["user"]
-    assert "password_hash" not in signup_data["user"]
+def test_lockout_after_repeated_failures(client, make):
+    user = make.user("DISASTER_MGMT", ["DISPATCH"])
+    # First, log in legitimately and obtain an active token
+    login_res = _login(client, user["email"], user["password"])
+    code = pyotp.TOTP(user["totp_secret"]).now()
+    ok = client.post("/api/v1/auth/mfa/verify", json={"mfa_token": login_res.json()["mfa_token"], "code": code})
+    token = ok.json()["access_token"]
+    # Token works initially
+    me = client.get("/api/v1/me", headers={"Authorization": f"Bearer {token}"})
+    assert me.status_code == 200
 
-    # Login with newly registered credentials
-    login_res = client.post(
-        "/api/auth/login",
-        json={
-            "identifier": signup_email,
-            "password": "volunteer_secure_password_123",
-        },
-    )
-    assert login_res.status_code == 200
-    assert login_res.json()["success"] is True
+    # Trigger lockout
+    for _ in range(5):
+        _login(client, user["email"], "wrong")
 
-def test_api_me_valid_token():
-    payload = {
-        "sub": "USR-001",
-        "name": "Dr. Rajesh Sharma",
-        "email": "commander@resq.gov.in",
-        "role": "Command Officer / Incident Commander",
-    }
-    token = create_jwt_token(payload, expires_in=3600)
-    response = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
-    assert response.status_code == 200
-    data = response.json()
-    assert data["success"] is True
-    assert data["user"]["email"] == "commander@resq.gov.in"
-    assert "password" not in data["user"]
-    assert "password_hash" not in data["user"]
+    # Even the right password is refused while locked, with the same generic error.
+    locked = _login(client, user["email"], user["password"])
+    assert locked.status_code == 401
+    assert locked.json()["error"]["code"] == "INVALID_CREDENTIALS"
 
-def test_api_me_expired_token():
-    payload = {
-        "sub": "USR-001",
-        "name": "Dr. Rajesh Sharma",
-        "email": "commander@resq.gov.in",
-    }
-    token = create_jwt_token(payload, expires_in=-10)
-    response = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
-    assert response.status_code == 401
-    assert "Token verification failed: JWT token has expired" in response.json()["detail"]
+    # Existing token must now be rejected because user is locked out and token_version rotated
+    blocked = client.get("/api/v1/me", headers={"Authorization": f"Bearer {token}"})
+    assert blocked.status_code == 401
 
-def test_api_me_malformed_token():
-    response = client.get("/api/auth/me", headers={"Authorization": "Bearer malformed.token.value"})
-    assert response.status_code == 401
-    assert "Token verification failed" in response.json()["detail"]
 
-def test_api_me_missing_token():
-    response = client.get("/api/auth/me")
-    assert response.status_code == 401
-    assert "Missing or invalid Bearer authorization header" in response.json()["detail"]
+def test_staff_without_mfa_cannot_sign_in(client, make):
+    user = make.user("DISASTER_MGMT", mfa=False)
+    r = _login(client, user["email"], user["password"])
+    assert r.status_code == 403
+    assert r.json()["error"]["code"] == "MFA_NOT_ENROLLED"
 
-def test_api_me_empty_bearer_token():
-    response = client.get("/api/auth/me", headers={"Authorization": "Bearer "})
-    assert response.status_code == 401
-    assert "Missing Bearer token" in response.json()["detail"]
+
+def test_seed_admin_placeholder_hash_fails_cleanly(client):
+    r = _login(client, "admin@drch.gov.in", "anything")
+    assert r.status_code == 401
+
+
+def test_dm_routes_require_authentication(client):
+    assert client.get("/api/v1/dm/dashboard").status_code == 401
+    r = client.get("/api/v1/dm/dashboard", headers={"Authorization": "Bearer forged.token.value"})
+    assert r.status_code == 401
+
+
+def test_normal_user_is_denied_and_the_denial_is_audited(client, make, sql):
+    citizen = make.user("NORMAL_USER", mfa=False)
+    r = client.get("/api/v1/dm/incidents", headers=make.token(citizen, mfa=False))
+    assert r.status_code == 403
+    assert r.json()["error"]["code"] == "ROLE_REQUIRED"
+    row = sql.execute(
+        "SELECT result FROM audit_logs WHERE actor_id = %s AND action = 'ACCESS_DENIED'", (citizen["user_id"],)
+    ).fetchone()
+    assert row["result"] == "DENIED"
+
+
+def test_dm_token_without_mfa_is_rejected(client, make):
+    staff = make.user("DISASTER_MGMT")
+    r = client.get("/api/v1/dm/dashboard", headers=make.token(staff, mfa=False))
+    assert r.status_code == 401
+    assert r.json()["error"]["code"] == "MFA_REQUIRED"
+
+
+def test_missing_permission_returns_403(client, make):
+    staff = make.staff()  # no permissions
+    r = client.get("/api/v1/dm/moderation/queue", headers=staff["headers"])
+    assert r.status_code == 403
+    assert r.json()["error"]["code"] == "PERMISSION_REQUIRED"
+
+
+def test_logout_revokes_existing_tokens(client, make):
+    staff = make.staff()
+    assert client.get("/api/v1/dm/dashboard", headers=staff["headers"]).status_code == 200
+    assert client.post("/api/v1/auth/logout", headers=staff["headers"]).status_code == 204
+    assert client.get("/api/v1/dm/dashboard", headers=staff["headers"]).status_code == 401
+
+
+def test_suspended_account_token_stops_working(client, make, sql):
+    staff = make.staff()
+    sql.execute("UPDATE users SET status = 'DISABLED' WHERE user_id = %s", (staff["user_id"],))
+    assert client.get("/api/v1/dm/dashboard", headers=staff["headers"]).status_code == 401
+
+
+def test_audit_log_is_append_only(sql):
+    import psycopg
+
+    row = sql.execute(
+        "INSERT INTO audit_logs (action, entity_type, rationale) VALUES ('TEST_EVENT', 'test', 'x') "
+        "RETURNING audit_id, row_hash, prev_hash"
+    ).fetchone()
+    assert len(row["row_hash"]) == 64 and len(row["prev_hash"]) == 64
+    with pytest.raises(psycopg.errors.RaiseException):
+        sql.execute("UPDATE audit_logs SET rationale = 'tampered' WHERE audit_id = %s", (row["audit_id"],))
+    with pytest.raises(psycopg.errors.RaiseException):
+        sql.execute("DELETE FROM audit_logs WHERE audit_id = %s", (row["audit_id"],))
