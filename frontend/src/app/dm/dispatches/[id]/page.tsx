@@ -108,7 +108,7 @@ export default function DispatchPage() {
             <KeyValue
               items={[
                 ["Incident", <Link key="i" href={`/dm/incidents/${d.incident_id}`} className="font-mono text-info hover:underline">{d.incident_ref}</Link>],
-                ["Scenario", scenarioLabel[d.scenario]],
+                ["Scenario", d.scenario ? (scenarioLabel[d.scenario] ?? d.scenario) : "—"],
                 ["Created", `${formatDateTime(d.created_at)} by ${d.created_by_name}`],
                 ["Acknowledged", d.acknowledged_at ? `${formatDateTime(d.acknowledged_at)} · ${d.acknowledged_by}` : null],
               ]}

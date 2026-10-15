@@ -279,8 +279,9 @@ export const useToast = () => useContext(ToastContext);
 
 // -------------------------------------------------------------- pagination
 
-export function Pagination({ page, pages, total, onPage }: { page: number; pages: number; total: number; onPage: (p: number) => void }) {
-  if (pages <= 1) return <p className="text-xs text-muted">{total} total</p>;
+export function Pagination({ page, pages = 1, total, onPage }: { page: number; pages?: number; total: number; onPage: (p: number) => void }) {
+  const pageCount = pages ?? 1;
+  if (pageCount <= 1) return <p className="text-xs text-muted">{total} total</p>;
   return (
     <nav className="flex items-center justify-between gap-3" aria-label="Pagination">
       <p className="text-xs text-muted">

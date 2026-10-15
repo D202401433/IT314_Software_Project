@@ -85,7 +85,7 @@ function Dispatches() {
                         {d.escalated && <Badge tone="critical">Escalated</Badge>}
                       </div>
                       <p className="mt-1 truncate text-sm">
-                        {d.agency_name} · {d.incident_ref} ({scenarioLabel[d.scenario]})
+                        {d.agency_name} · {d.incident_ref} ({d.scenario ? (scenarioLabel[d.scenario] ?? d.scenario) : "General"})
                       </p>
                     </div>
                     <p className="text-xs text-muted">
