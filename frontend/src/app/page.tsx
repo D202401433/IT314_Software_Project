@@ -70,6 +70,130 @@ const TILE_LAYERS = {
   },
 };
 
+function CommandDashboard({
+  incidents,
+  responders,
+  dispatches,
+  unreadAlertCount,
+  onMap,
+  onReport,
+  onAlerts,
+  onWorkspace,
+  onAnalytics,
+  showCitizenReport,
+  showRoleWorkspace,
+  showAlertsDrawer,
+  showAnalytics,
+  showDispatchModal,
+  dispatchIncident,
+  onCloseReport,
+  onCloseWorkspace,
+  onCloseAlerts,
+  onCloseAnalytics,
+  onCloseDispatch,
+  onOpenDispatch,
+}: {
+  incidents: IncidentRecord[];
+  responders: unknown[];
+  dispatches: unknown[];
+  unreadAlertCount: number;
+  onMap: () => void;
+  onReport: () => void;
+  onAlerts: () => void;
+  onWorkspace: () => void;
+  onAnalytics: () => void;
+  showCitizenReport: boolean;
+  showRoleWorkspace: boolean;
+  showAlertsDrawer: boolean;
+  showAnalytics: boolean;
+  showDispatchModal: boolean;
+  dispatchIncident: IncidentRecord | null;
+  onCloseReport: () => void;
+  onCloseWorkspace: () => void;
+  onCloseAlerts: () => void;
+  onCloseAnalytics: () => void;
+  onCloseDispatch: () => void;
+  onOpenDispatch: (incident: IncidentRecord) => void;
+}) {
+  const active = incidents.filter((incident) => !["RESOLVED", "CLOSED"].includes(incident.lifecycleStatus)).length;
+  const critical = incidents.filter((incident) => incident.severity === "CRITICAL").length;
+  const cards = [
+    ["Active incidents", String(active), critical ? `${critical} critical` : "Live feed", "#eaf3ff", "#075cab"],
+    ["Units deployed", String(responders.length), `${dispatches.length} dispatches`, "#e9f9f0", "#078753"],
+    ["Response status", "Live", "Operations monitored", "#fff4e5", "#b45d00"],
+    ["Alerts", String(unreadAlertCount), unreadAlertCount ? "Needs review" : "All clear", "#fff0f0", "#ca3131"],
+  ];
+
+  return (
+    <main className="h-screen overflow-y-auto bg-[#f4f7fa] text-[#13263d]">
+      <div className="flex h-9 items-center justify-between bg-[#07569c] px-4 text-[11px] text-white sm:px-7">
+        <span>Emergency Response &amp; Coordination Platform</span>
+        <span className="flex items-center gap-2 sm:gap-5"><span className="text-emerald-300">●</span> All systems operational <span className="hidden sm:inline">◎ English⌄</span></span>
+      </div>
+      <header className="flex h-20 items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-7">
+        <div className="flex items-center gap-3">
+          <div className="grid h-12 w-12 place-items-center rounded-lg border border-sky-200 bg-sky-50 text-2xl text-[#07569c]" aria-hidden>🛡</div>
+          <div><h1 className="text-[27px] leading-none font-bold tracking-tight text-[#07569c]">ResQ <span className="font-light text-slate-700">AI</span></h1><p className="mt-1.5 text-[11px] text-slate-500">Integrated Emergency Management</p></div>
+        </div>
+        <div className="text-right"><p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Regional command</p><p className="mt-1.5 text-sm font-semibold">National Operations Center</p></div>
+      </header>
+      <div className="flex min-h-[calc(100vh-116px)]">
+        <aside className="hidden w-60 shrink-0 border-r border-slate-200 bg-white px-3 py-5 lg:block">
+          <p className="mb-3 px-3 text-[11px] font-bold uppercase tracking-wider text-slate-500">Operations</p>
+          <nav className="space-y-1 text-sm">
+            <button aria-current="page" className="w-full rounded-lg border-l-4 border-[#075cab] bg-[#e2f0ff] px-3 py-3 text-left font-semibold text-[#075cab]">▦ &nbsp; Dashboard</button>
+            <button onClick={onWorkspace} className="w-full rounded-lg px-3 py-3 text-left text-slate-600 transition hover:bg-slate-50">◉ &nbsp; Live incidents <span className="float-right rounded bg-slate-100 px-2 text-xs">{active}</span></button>
+            <button onClick={onMap} className="w-full rounded-lg px-3 py-3 text-left text-slate-600 transition hover:bg-slate-50">⌖ &nbsp; Incident map</button>
+            <button onClick={onWorkspace} className="w-full rounded-lg px-3 py-3 text-left text-slate-600 transition hover:bg-slate-50">➤ &nbsp; Dispatch center</button>
+            <button onClick={onAlerts} className="w-full rounded-lg px-3 py-3 text-left text-slate-600 transition hover:bg-slate-50">♧ &nbsp; Alerts {unreadAlertCount > 0 && <span className="float-right rounded bg-red-50 px-2 text-xs text-red-600">{unreadAlertCount}</span>}</button>
+            <button onClick={onWorkspace} className="w-full rounded-lg px-3 py-3 text-left text-slate-600 transition hover:bg-slate-50">♙ &nbsp; Responders</button>
+            <div className="my-3 border-t border-slate-200" />
+            <button onClick={onWorkspace} className="w-full rounded-lg px-3 py-3 text-left text-slate-600 transition hover:bg-slate-50">♙ &nbsp; Resources</button>
+            <button onClick={onAnalytics} className="w-full rounded-lg px-3 py-3 text-left text-slate-600 transition hover:bg-slate-50">▥ &nbsp; Analytics &amp; reports</button>
+          </nav>
+        </aside>
+        <section className="min-w-0 flex-1 p-4 sm:p-6 lg:p-7">
+          <nav aria-label="Dashboard navigation" className="mb-4 flex gap-1 overflow-x-auto lg:hidden">
+            <span aria-current="page" className="shrink-0 rounded-lg bg-[#e2f0ff] px-3 py-2 text-xs font-semibold text-[#075cab]">▦ Dashboard</span>
+            <button onClick={onWorkspace} className="shrink-0 rounded-lg px-3 py-2 text-xs text-slate-600 hover:bg-white">◉ Live incidents</button>
+            <button onClick={onMap} className="shrink-0 rounded-lg px-3 py-2 text-xs text-slate-600 hover:bg-white">⌖ Incident map</button>
+            <button onClick={onAlerts} className="shrink-0 rounded-lg px-3 py-2 text-xs text-slate-600 hover:bg-white">♧ Alerts</button>
+          </nav>
+          <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Situational awareness</p><h2 className="mt-1.5 text-2xl font-bold sm:text-3xl">Command Dashboard</h2><p className="mt-1.5 text-sm text-slate-500">Real-time incident monitoring and coordinated emergency response.</p></div><div className="flex gap-2"><button onClick={onAnalytics} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold shadow-sm transition hover:bg-slate-50">Analytics</button><button onClick={onReport} className="rounded-lg bg-[#075cab] px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#064a85]">+ Situation report</button></div></div>
+          {critical > 0 && <button onClick={onWorkspace} className="mb-6 flex w-full items-center justify-between rounded-lg border border-red-200 border-l-4 border-l-red-500 bg-red-50 px-5 py-4 text-left text-sm text-red-700"><span><b>Priority attention required</b> &nbsp; {critical} critical incident{critical === 1 ? "" : "s"} active.</span><span>Review →</span></button>}
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{cards.map(([label, value, detail, tone, color]) => <article key={label} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5"><div className="flex items-start justify-between"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{label}</p><span className="rounded-lg px-2 py-1" style={{ backgroundColor: tone, color }}>●</span></div><p className="mt-4 text-3xl font-bold sm:text-4xl">{value}</p><p className="mt-2 text-xs text-slate-500">{detail}</p></article>)}</div>
+          <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(300px,0.75fr)]"><article className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"><div className="flex items-center justify-between border-b border-slate-200 px-4 py-3.5 sm:px-5"><div><h3 className="font-semibold">⌖ &nbsp; Live incident map</h3><p className="mt-0.5 text-xs text-slate-500">Operational overview · India</p></div><button onClick={onMap} className="text-sm font-semibold text-[#075cab] hover:underline">Open map →</button></div><button onClick={onMap} aria-label="Open interactive incident map" className="relative grid h-56 w-full place-items-center overflow-hidden bg-[#eaf2f3] text-center sm:h-64">
+            <svg aria-hidden="true" viewBox="0 0 900 360" preserveAspectRatio="xMidYMid slice" className="absolute inset-0 h-full w-full">
+              <rect width="900" height="360" fill="#eaf2f3" />
+              <path d="M0 55 150 20 270 65 390 20 520 70 650 25 900 60M0 160 130 115 260 175 390 120 510 170 660 115 900 165M0 285 150 240 280 300 420 245 570 310 720 245 900 300" fill="none" stroke="#d3e4df" strokeWidth="34" />
+              <path d="M70-20 160 380M280-20 355 380M520-20 440 380M700-20 620 380M0 95 900 255M0 230 900 100" fill="none" stroke="#fff" strokeWidth="11" />
+              <path d="M70-20 160 380M280-20 355 380M520-20 440 380M700-20 620 380M0 95 900 255M0 230 900 100" fill="none" stroke="#cbd5d7" strokeWidth="2" />
+              <path d="M0 340Q160 250 300 330T600 320T900 345" fill="none" stroke="#89c7e0" strokeWidth="20" />
+            </svg>
+            {incidents.slice(0, 4).map((incident, index) => <span key={incident.id} className="absolute z-10 grid size-8 place-items-center rounded-full border-2 border-white bg-[#e9842a] text-xs font-bold text-white shadow-md" style={{ left: `${24 + index * 17}%`, top: `${25 + (index % 2) * 35}%` }} aria-hidden>!</span>)}
+            <span className="absolute bottom-3 left-3 z-10 rounded-md border border-slate-200 bg-white/95 px-3 py-1.5 text-[11px] font-semibold text-slate-700 shadow"><span className="mr-2 text-emerald-600">●</span>India · Operational area</span>
+            <span className="relative z-10 rounded-full border border-sky-200 bg-white/95 px-4 py-2 text-sm font-semibold text-[#07569c] shadow">Open interactive map</span>
+          </button></article><article className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"><div className="flex items-center justify-between border-b border-sky-200 bg-[#e5f2ff] px-4 py-3.5 sm:px-5"><h3 className="font-semibold text-[#07569c]">✦ AI incident triage</h3><span className="rounded border border-sky-200 bg-white/70 px-2 py-1 text-[10px] font-bold text-[#07569c]">AI ASSIST</span></div><div className="p-5"><p className="text-xs text-slate-500">{incidents[0]?.id || "LATEST ASSESSMENT"}</p><h4 className="mt-3 text-lg font-bold">{incidents[0]?.title || "No active incident selected"}</h4><p className="mt-2 text-sm leading-6 text-slate-600">AI-assisted prioritization is available to support the command team.</p><div className="mt-4 flex items-center gap-2 text-xs"><span className="rounded bg-red-50 px-2 py-1 font-semibold text-red-700">{incidents[0]?.severity || "Monitoring"}</span><span className="text-emerald-700">✓ Verified report</span></div><button onClick={onWorkspace} className="mt-5 text-sm font-semibold text-[#075cab] hover:underline">Open workspace →</button></div></article></div>
+        </section>
+      </div>
+      <CitizenReportModal isOpen={showCitizenReport} onClose={onCloseReport} />
+      <RoleWorkspaceModal
+        isOpen={showRoleWorkspace}
+        onClose={onCloseWorkspace}
+        onOpenCitizenReport={onReport}
+        onOpenDispatch={onOpenDispatch}
+      />
+      <AlertsDrawer isOpen={showAlertsDrawer} onClose={onCloseAlerts} />
+      <AnalyticsModal isOpen={showAnalytics} onClose={onCloseAnalytics} />
+      <DispatchModal
+        incident={dispatchIncident}
+        isOpen={showDispatchModal}
+        onClose={onCloseDispatch}
+      />
+    </main>
+  );
+}
+
 // Permanent 100% watermark-free street & road labels overlay (Esri Reference Labels)
 const STREET_LABELS_OVERLAY = "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}";
 
@@ -126,6 +250,8 @@ function ResQGeoPortalInner() {
   const [showSplash, setShowSplash] = useState(true);
   const [splashFading, setSplashFading] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
+  const [showMapView, setShowMapView] = useState(false);
+  const [mapReady, setMapReady] = useState(false);
 
   // Auth & Role Modals visibility
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -185,6 +311,8 @@ function ResQGeoPortalInner() {
 
   // Initialize Map
   useEffect(() => {
+    if (!showMapView) return;
+
     let isCancelled = false;
 
     const initMap = async () => {
@@ -278,6 +406,8 @@ function ResQGeoPortalInner() {
           }, 500);
         });
 
+        setMapReady(true);
+
         // Ensure canvas dimensions are refreshed for the layout
         setTimeout(() => {
           if (!isCancelled && mapRef.current) {
@@ -319,22 +449,22 @@ function ResQGeoPortalInner() {
         mapRef.current = null;
       }
     };
-  }, [fetchRealPlaceName]);
+  }, [fetchRealPlaceName, showMapView]);
 
   // Handle map navigation requests from context
   useEffect(() => {
-    if (!mapFocusTarget || !mapRef.current) return;
+    if (!showMapView || !mapReady || !mapFocusTarget || !mapRef.current) return;
     mapRef.current.flyTo([mapFocusTarget.lat, mapFocusTarget.lon], mapFocusTarget.zoom, {
       duration: 2.5,
       easeLinearity: 0.22,
     });
     setMapFocusTarget(null);
-  }, [mapFocusTarget, setMapFocusTarget]);
+  }, [mapFocusTarget, setMapFocusTarget, mapReady, showMapView]);
 
   // Render Incident Markers on Map
   useEffect(() => {
     const L = (window as any).L;
-    if (!L || !mapRef.current || !incidentsLayerRef.current) return;
+    if (!showMapView || !mapReady || !L || !mapRef.current || !incidentsLayerRef.current) return;
 
     incidentsLayerRef.current.clearLayers();
 
@@ -392,12 +522,12 @@ function ResQGeoPortalInner() {
 
       marker.addTo(incidentsLayerRef.current);
     });
-  }, [incidents, selectIncident]);
+  }, [incidents, selectIncident, mapReady, showMapView]);
 
   // Render Responder Unit Markers on Map
   useEffect(() => {
     const L = (window as any).L;
-    if (!L || !mapRef.current || !respondersLayerRef.current) return;
+    if (!showMapView || !mapReady || !L || !mapRef.current || !respondersLayerRef.current) return;
 
     respondersLayerRef.current.clearLayers();
 
@@ -459,12 +589,12 @@ function ResQGeoPortalInner() {
 
       marker.addTo(respondersLayerRef.current);
     });
-  }, [responders]);
+  }, [responders, mapReady, showMapView]);
 
   // Render Infrastructure Markers on Map (Hospitals, Shelters, Blocked Roads)
   useEffect(() => {
     const L = (window as any).L;
-    if (!L || !mapRef.current || !infrastructureLayerRef.current) return;
+    if (!showMapView || !mapReady || !L || !mapRef.current || !infrastructureLayerRef.current) return;
 
     infrastructureLayerRef.current.clearLayers();
 
@@ -513,12 +643,12 @@ function ResQGeoPortalInner() {
 
       marker.addTo(infrastructureLayerRef.current);
     });
-  }, [infrastructure]);
+  }, [infrastructure, mapReady, showMapView]);
 
   // Render Route Polylines for Active Dispatches
   useEffect(() => {
     const L = (window as any).L;
-    if (!L || !mapRef.current || !routesLayerRef.current) return;
+    if (!showMapView || !mapReady || !L || !mapRef.current || !routesLayerRef.current) return;
 
     routesLayerRef.current.clearLayers();
 
@@ -532,7 +662,7 @@ function ResQGeoPortalInner() {
         }).addTo(routesLayerRef.current);
       }
     });
-  }, [dispatches]);
+  }, [dispatches, mapReady, showMapView]);
 
   // Switch Base Layer
   const switchBaseLayer = (key: keyof typeof TILE_LAYERS) => {
@@ -572,16 +702,6 @@ function ResQGeoPortalInner() {
 
     setCurrentBaseLayer(key);
     setShowLayerMenu(false);
-  };
-
-  // 1-Click Toggle between Satellite and Detailed Street Map
-  const toggleSatelliteOrStreets = () => {
-    const isCurrentlySatellite = TILE_LAYERS[currentBaseLayer].isSatellite;
-    if (isCurrentlySatellite) {
-      switchBaseLayer("streets");
-    } else {
-      switchBaseLayer("esriHybrid");
-    }
   };
 
   // Toggle Street Names Overlay
@@ -775,18 +895,40 @@ function ResQGeoPortalInner() {
     );
   };
 
-  // Fullscreen
-  const handleFullscreen = () => {
-    const el = mapContainerRef.current;
-    if (!el) return;
-    if (!document.fullscreenElement) {
-      el.requestFullscreen?.().catch((err) => console.log(err));
-    } else {
-      document.exitFullscreen?.().catch((err) => console.log(err));
-    }
-  };
-
-  const isCurrentLayerSatellite = TILE_LAYERS[currentBaseLayer].isSatellite;
+  if (!showMapView) {
+    return <CommandDashboard
+      incidents={incidents}
+      responders={responders}
+      dispatches={dispatches}
+      unreadAlertCount={unreadAlertCount}
+      onMap={() => {
+        setMapReady(false);
+        setShowMapView(true);
+      }}
+      onReport={() => setShowCitizenReport(true)}
+      onAlerts={() => setShowAlertsDrawer(true)}
+      onWorkspace={() => setShowRoleWorkspace(true)}
+      onAnalytics={() => setShowAnalytics(true)}
+      showCitizenReport={showCitizenReport}
+      showRoleWorkspace={showRoleWorkspace}
+      showAlertsDrawer={showAlertsDrawer}
+      showAnalytics={showAnalytics}
+      showDispatchModal={showDispatchModal}
+      dispatchIncident={dispatchIncident}
+      onCloseReport={() => setShowCitizenReport(false)}
+      onCloseWorkspace={() => setShowRoleWorkspace(false)}
+      onCloseAlerts={() => setShowAlertsDrawer(false)}
+      onCloseAnalytics={() => setShowAnalytics(false)}
+      onCloseDispatch={() => {
+        setShowDispatchModal(false);
+        setDispatchIncident(null);
+      }}
+      onOpenDispatch={(incident) => {
+        setDispatchIncident(incident);
+        setShowDispatchModal(true);
+      }}
+    />;
+  }
 
   return (
     <div className="relative w-screen h-screen overflow-hidden select-none font-sans bg-slate-900 text-slate-800">
@@ -933,33 +1075,40 @@ function ResQGeoPortalInner() {
       {/* ============ HEADER (ResQ Bhuvan-Style) ============ */}
       <header className="fixed top-3 left-3 right-3 h-12 z-[1000] rounded-2xl bg-slate-950/90 backdrop-blur-xl flex items-center justify-between px-3 text-white shadow-2xl border border-white/10">
         <div className="flex items-center gap-2.5">
-          <div
+          <button
+            type="button"
             onClick={() => mapRef.current?.flyTo([23.5, 80.5], 5, { duration: 3, easeLinearity: 0.22 })}
-            className="w-9 h-9 rounded-full flex items-center justify-center text-lg border-2 border-white shadow cursor-pointer transition-transform hover:scale-105"
+            className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-white text-lg shadow transition-transform hover:scale-105"
             style={{
               background: "radial-gradient(circle at 35% 35%, #38bdf8, #0369a1 70%)",
             }}
-            title="ResQ Platform • Click to view all of India"
+            title="Center map on India"
+            aria-label="Center map on India"
           >
             🛡️
-          </div>
+          </button>
 
           <div>
             <div className="flex items-baseline gap-1.5 leading-tight">
               <span className="text-[18px] font-extrabold tracking-tight text-white">ResQ</span>
-              <span className="hidden sm:inline text-[12px] font-medium tracking-wide text-sky-300">Operations</span>
-              <span className="hidden md:inline-block text-[10px] uppercase font-semibold bg-sky-900/90 text-sky-200 px-1.5 py-0.5 rounded ml-1 border border-sky-700/50">
-                NDMA Command & Triage GIS
-              </span>
-            </div>
-            <div className="hidden lg:block text-[9px] font-medium text-slate-400 leading-none">
-              Disaster Response Coordination Hub • Real-Time Emergency Operations
+              <span className="text-[12px] font-medium tracking-wide text-sky-300">Operations</span>
             </div>
           </div>
         </div>
 
-        <nav className="flex items-center gap-1.5 text-[13px]">
-          {/* Dashboard Panel Toggle */}
+        <nav className="hidden">
+          <button
+            onClick={() => {
+              setShowMapView(false);
+              setShowDashboard(false);
+            }}
+            className="hidden md:flex items-center gap-1.5 rounded-full border border-sky-700/60 bg-slate-900/60 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-sky-500/70 hover:text-white"
+            title="Return to the command dashboard"
+          >
+            <span aria-hidden>▦</span>
+            <span>Dashboard</span>
+          </button>
+          {/* Role-specific dashboard panel */}
           <button
             onClick={() => setShowDashboard((prev) => !prev)}
             className={`hidden md:flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border transition cursor-pointer ${
@@ -967,10 +1116,10 @@ function ResQGeoPortalInner() {
                 ? "bg-sky-500/30 border-sky-400/60 text-sky-200"
                 : "bg-slate-900/60 border-slate-700/60 text-slate-300 hover:text-white hover:border-sky-600/50"
             }`}
-            title="Toggle role dashboard panel"
+            title="Toggle role-specific dashboard panel"
           >
             <span>📊</span>
-            <span>Dashboard</span>
+            <span>My workspace</span>
           </button>
           {/* If NOT Authenticated: Guest Mode Controls */}
           {!isAuthenticated ? (
@@ -1208,18 +1357,51 @@ function ResQGeoPortalInner() {
             <option>मराठी</option>
           </select>
         </nav>
+        <nav aria-label="Quick actions" className="flex items-center gap-2">
+          {!isAuthenticated && (
+            <button
+              onClick={() => {
+                setAuthModalMode("login");
+                setShowAuthModal(true);
+              }}
+              className="rounded-lg px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/10"
+            >
+              Sign in
+            </button>
+          )}
+          <button
+            onClick={() => setShowCitizenReport(true)}
+            className="rounded-lg bg-red-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-red-700"
+            title="Report an emergency"
+          >
+            Report SOS
+          </button>
+          <button
+            onClick={() => setShowAlertsDrawer(true)}
+            aria-label={`Open alerts${unreadAlertCount ? `, ${unreadAlertCount} unread` : ""}`}
+            className="relative grid size-9 place-items-center rounded-lg text-white transition hover:bg-white/10"
+            title="Alerts"
+          >
+            <span aria-hidden>🔔</span>
+            {unreadAlertCount > 0 && (
+              <span className="absolute right-0.5 top-0.5 grid size-4 place-items-center rounded-full bg-red-500 text-[9px] font-bold text-white">
+                {unreadAlertCount}
+              </span>
+            )}
+          </button>
+        </nav>
       </header>
 
       {/* ============ SEARCH PANEL ============ */}
-      <div className="fixed top-[72px] left-5 z-[900] flex items-center bg-white/95 rounded-2xl shadow-xl border border-slate-200/80 overflow-hidden backdrop-blur-sm">
-        <button
-          onClick={() => setShowNavDrawer(true)}
-          title="Open Portal Navigation Menu"
-          className="p-2.5 px-3 text-slate-700 hover:bg-slate-100 transition-colors text-base cursor-pointer"
-        >
-          ☰
-        </button>
-
+      <button
+        onClick={() => setShowNavDrawer(true)}
+        aria-label="Open navigation sidebar"
+        title="Open navigation"
+        className="fixed left-0 top-1/2 z-[950] grid h-12 w-7 -translate-y-1/2 place-items-center rounded-r-lg border border-l-0 border-sky-200 bg-white/95 text-lg font-semibold text-[#07569c] shadow-lg transition hover:w-9 hover:bg-white"
+      >
+        ›
+      </button>
+      <div className="fixed left-4 top-[72px] z-[900] flex items-center overflow-hidden rounded-xl border border-slate-200/80 bg-white/95 shadow-lg backdrop-blur-sm">
         <form onSubmit={handleSearch} className="flex items-center">
           <input
             type="text"
@@ -1238,25 +1420,10 @@ function ResQGeoPortalInner() {
           </button>
         </form>
 
-        <div className="w-[1px] h-6 bg-slate-200 mx-0.5" />
-
-        <button
-          onClick={() => {
-            alert("Voice Search: Please speak destination or incident area.");
-          }}
-          title="Voice Search"
-          className="hidden p-2.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-sm cursor-pointer"
-        >
-          🎙️
-        </button>
-
-        <span className="text-[11px] font-semibold bg-slate-100 text-slate-600 px-2 py-0.5 rounded mx-1.5 border border-slate-200">
-          {selectedLang === "हिन्दी" ? "HI" : "EN"}
-        </span>
-
         <button
           onClick={() => setShowLayerMenu(!showLayerMenu)}
-          title="Basemap Views"
+          title="Choose map layer"
+          aria-label="Choose map layer"
           className={`p-2.5 px-3 transition-colors text-sm font-bold cursor-pointer ${
             showLayerMenu ? "bg-sky-100 text-[#0c4a75]" : "text-[#0c4a75] hover:bg-slate-100"
           }`}
@@ -1316,30 +1483,6 @@ function ResQGeoPortalInner() {
         </div>
       )}
 
-      {/* ============ 1-CLICK SATELLITE ⇄ STREETS QUICK SWITCHER ============ */}
-      <div className="fixed bottom-5 left-5 z-[900] flex items-center gap-2">
-        <button
-          onClick={toggleSatelliteOrStreets}
-          className="flex items-center gap-2 bg-white/95 hover:bg-white text-slate-800 text-xs font-semibold px-3 py-2 rounded-lg shadow-lg border border-slate-300 backdrop-blur transition-all hover:scale-105 cursor-pointer"
-          title="Toggle between Satellite Imagery and Detailed Street Map"
-        >
-          <span className="text-base">{isCurrentLayerSatellite ? "🗺️" : "🛰️"}</span>
-          <span>Switch to {isCurrentLayerSatellite ? "Street View" : "Satellite"}</span>
-        </button>
-
-        <button
-          onClick={toggleStreetOverlay}
-          className={`hidden px-2.5 py-2 rounded-lg text-xs font-medium border shadow backdrop-blur transition-colors cursor-pointer ${
-            streetOverlayActive
-              ? "bg-sky-100 text-sky-800 border-sky-300"
-              : "bg-white/90 text-slate-600 border-slate-200"
-          }`}
-          title="Toggle Street Names & Roads Overlay"
-        >
-          🏷️ Street Labels: {streetOverlayActive ? "ON" : "OFF"}
-        </button>
-      </div>
-
       {/* ============ MAP CANVAS ============ */}
       <div id="map" ref={mapContainerRef} className="fixed inset-0 bg-[#b6b6b6]" />
 
@@ -1356,67 +1499,31 @@ function ResQGeoPortalInner() {
         </div>
       )}
 
-      {/* ============ RIGHT TOOL STRIP ============ */}
-      <div className="fixed right-5 top-1/2 -translate-y-1/2 z-[900] flex flex-col gap-1.5 rounded-2xl bg-white/90 p-1.5 shadow-xl border border-slate-200/80 backdrop-blur">
-        <button
-          onClick={handleFullscreen}
-          title="Toggle Fullscreen"
-          className="w-10 h-10 rounded-lg bg-white hover:bg-slate-100 text-slate-800 text-base shadow-md flex items-center justify-center transition-all border border-slate-200/80 hover:shadow-lg cursor-pointer"
-        >
-          ⛶
-        </button>
-        <button
-          onClick={() => mapRef.current?.flyTo([22, 78], 3, { duration: 3.0, easeLinearity: 0.22 })}
-          title="Reset Global View (Country Level)"
-          className="w-10 h-10 rounded-lg bg-white hover:bg-slate-100 text-slate-800 text-base shadow-md flex items-center justify-center transition-all border border-slate-200/80 hover:shadow-lg cursor-pointer"
-        >
-          ⟲
-        </button>
-        <button
-          onClick={() => mapRef.current?.flyTo([23.5, 80.5], 5, { duration: 3.0, easeLinearity: 0.22 })}
-          title="Zoom to India (National Level)"
-          className="w-10 h-10 rounded-lg bg-white hover:bg-slate-100 text-slate-800 text-base shadow-md flex items-center justify-center transition-all border border-slate-200/80 hover:shadow-lg cursor-pointer"
-        >
-          🏠
-        </button>
+      {/* ============ MAP TOOLS ============ */}
+      <div className="fixed right-4 top-1/2 z-[900] flex -translate-y-1/2 flex-col gap-1 rounded-xl border border-slate-200/80 bg-white/95 p-1 shadow-lg backdrop-blur">
         <button
           onClick={() => mapRef.current?.zoomIn(1, { animate: true })}
           title="Zoom In"
-          className="w-10 h-10 rounded-lg bg-white hover:bg-slate-100 text-slate-800 text-lg font-bold shadow-md flex items-center justify-center transition-all border border-slate-200/80 hover:shadow-lg cursor-pointer"
+          aria-label="Zoom in"
+          className="grid size-9 place-items-center rounded-lg text-lg font-semibold text-slate-700 transition hover:bg-slate-100"
         >
           ＋
         </button>
         <button
           onClick={() => mapRef.current?.zoomOut(1, { animate: true })}
           title="Zoom Out"
-          className="w-10 h-10 rounded-lg bg-white hover:bg-slate-100 text-slate-800 text-lg font-bold shadow-md flex items-center justify-center transition-all border border-slate-200/80 hover:shadow-lg cursor-pointer"
+          aria-label="Zoom out"
+          className="grid size-9 place-items-center rounded-lg text-lg font-semibold text-slate-700 transition hover:bg-slate-100"
         >
           －
         </button>
         <button
           onClick={handleLocateMe}
           title="My Location"
-          className="w-10 h-10 rounded-lg bg-white hover:bg-slate-100 text-slate-800 text-base shadow-md flex items-center justify-center transition-all border border-slate-200/80 hover:shadow-lg cursor-pointer"
+          aria-label="Show my location"
+          className="grid size-9 place-items-center rounded-lg text-base text-slate-700 transition hover:bg-slate-100"
         >
           📍
-        </button>
-        <button
-          onClick={toggleMeasurement}
-          title="Measure Distance"
-          className={`w-10 h-10 rounded-lg text-base shadow-md flex items-center justify-center transition-all border cursor-pointer ${
-            isMeasuring
-              ? "bg-blue-600 text-white border-blue-700 shadow-blue-500/50"
-              : "bg-white hover:bg-slate-100 text-slate-800 border-slate-200/80"
-          }`}
-        >
-          📏
-        </button>
-        <button
-          onClick={toggleSatelliteOrStreets}
-          title={`Switch to ${isCurrentLayerSatellite ? "Street View" : "Satellite"}`}
-          className="w-10 h-10 rounded-lg bg-white hover:bg-slate-100 text-slate-800 text-base shadow-md flex items-center justify-center transition-all border border-slate-200/80 hover:shadow-lg cursor-pointer"
-        >
-          {isCurrentLayerSatellite ? "🗺️" : "🛰️"}
         </button>
       </div>
 
@@ -1495,17 +1602,40 @@ function ResQGeoPortalInner() {
                 </div>
                 <button
                   onClick={() => setShowNavDrawer(false)}
-                  className="text-slate-400 hover:text-slate-700 text-lg font-bold cursor-pointer"
+                  aria-label="Close navigation sidebar"
+                  title="Close navigation"
+                  className="grid size-9 place-items-center rounded-lg bg-sky-50 text-lg font-bold text-[#07569c] transition hover:bg-sky-100"
                 >
-                  ✕
+                  ‹
                 </button>
               </div>
 
               <div className="space-y-4">
                 <div>
-                  <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">
-                    Operational Agency Workspaces
-                  </h4>
+                  <h4 className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">Navigate</h4>
+                  <div className="space-y-1 text-sm">
+                    <button
+                      onClick={() => {
+                        setShowNavDrawer(false);
+                        setShowDashboard(false);
+                        setMapReady(false);
+                        setShowMapView(false);
+                      }}
+                      className="w-full cursor-pointer rounded-lg px-3 py-2.5 text-left font-medium text-slate-700 transition-colors hover:bg-slate-100"
+                    >
+                      <span aria-hidden className="mr-2 text-[#07569c]">⌂</span> Home dashboard
+                    </button>
+                    <div aria-current="page" className="w-full rounded-lg bg-sky-50 px-3 py-2.5 font-semibold text-[#07569c]">
+                      <span aria-hidden className="mr-2">⌖</span> Incident map
+                    </div>
+                    <button onClick={() => { setShowNavDrawer(false); setShowRoleWorkspace(true); }} className="w-full rounded-lg px-3 py-2.5 text-left font-medium text-slate-700 transition-colors hover:bg-slate-100"><span aria-hidden className="mr-2">▤</span> Operations workspace</button>
+                    <button onClick={() => { setShowNavDrawer(false); setShowAnalytics(true); }} className="w-full rounded-lg px-3 py-2.5 text-left font-medium text-slate-700 transition-colors hover:bg-slate-100"><span aria-hidden className="mr-2">▥</span> Analytics &amp; reports</button>
+                    <button onClick={() => { setShowNavDrawer(false); setShowAlertsDrawer(true); }} className="w-full rounded-lg px-3 py-2.5 text-left font-medium text-slate-700 transition-colors hover:bg-slate-100"><span aria-hidden className="mr-2">♧</span> Alerts <span className="float-right rounded-full bg-red-50 px-2 text-xs text-red-600">{unreadAlertCount}</span></button>
+                    <button onClick={() => { setShowNavDrawer(false); setShowCitizenReport(true); }} className="w-full rounded-lg px-3 py-2.5 text-left font-semibold text-red-700 transition-colors hover:bg-red-50"><span aria-hidden className="mr-2">!</span> Report an emergency</button>
+                  </div>
+                </div>
+                <details className="rounded-lg border border-slate-200 px-3 py-2">
+                  <summary className="cursor-pointer list-none text-xs font-semibold text-slate-600">Switch operational role</summary>
                   <div className="space-y-1.5 text-sm">
                     <button
                       onClick={() => {
@@ -1578,11 +1708,20 @@ function ResQGeoPortalInner() {
                       <span>⚙️</span> System Admin & Audit Logs
                     </button>
                   </div>
-                </div>
+                </details>
               </div>
             </div>
 
-            <div className="pt-4 border-t border-slate-200 text-xs text-slate-500">
+            <div className="space-y-4 border-t border-slate-200 pt-4 text-xs text-slate-500">
+              {isAuthenticated ? (
+                <div>
+                  <p className="font-semibold text-slate-800">{currentUser.name}</p>
+                  <p className="mt-0.5">{currentUser.agency}</p>
+                  <button onClick={() => { logout(); setShowNavDrawer(false); }} className="mt-2 font-semibold text-red-600 hover:text-red-700">Sign out</button>
+                </div>
+              ) : (
+                <button onClick={() => { setShowNavDrawer(false); setAuthModalMode("login"); setShowAuthModal(true); }} className="font-semibold text-[#07569c] hover:underline">Sign in to your account</button>
+              )}
               <div className="font-semibold text-slate-700 mb-1">Emergency Helplines (India):</div>
               <div>• National Emergency: <b>112</b></div>
               <div>• Disaster Management (NDMA): <b>1070 / 1077</b></div>
