@@ -14,30 +14,49 @@ env:
 
 jobs:
   # ============================================================================
-  # 1. Build and Publish Containers to GHCR
+  # 0. Detect Changed Directories
   # ============================================================================
-  publish-containers:
-    name: Publish Container to GHCR (${{ matrix.name }})
+  detect-changes:
+    name: Detect Changed Components
     runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+      backend: ${{ steps.filter.outputs.backend }}
+      ai-workers: ${{ steps.filter.outputs.ai-workers }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check for file changes
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            frontend:
+              - 'frontend/**'
+              - 'docker-compose*.yml'
+              - '.github/workflows/cd.yml'
+            backend:
+              - 'backend/**'
+              - 'docker-compose*.yml'
+              - 'render.yaml'
+              - '.github/workflows/cd.yml'
+            ai-workers:
+              - 'ai-workers/**'
+              - 'docker-compose*.yml'
+              - '.github/workflows/cd.yml'
+
+  # ============================================================================
+  # 1. Build and Publish Frontend Container to GHCR (Only if frontend changed)
+  # ============================================================================
+  publish-frontend:
+    name: Publish Container / Frontend
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.frontend == 'true' || github.event_name == 'workflow_dispatch' }}
     permissions:
       contents: read
       packages: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: frontend
-            context: ./frontend
-            file: ./frontend/Dockerfile
-            image_name: drch_frontend
-          - name: backend
-            context: ./backend
-            file: ./backend/Dockerfile
-            image_name: drch_backend
-          - name: ai-workers
-            context: ./ai-workers
-            file: ./ai-workers/Dockerfile
-            image_name: drch_ai_workers
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -56,7 +75,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}/${{ matrix.image_name }}
+          images: ghcr.io/${{ github.repository }}/drch_frontend
           tags: |
             type=raw,value=latest
             type=sha,format=short,prefix=sha-
@@ -64,8 +83,8 @@ jobs:
       - name: Build and push verified container to GHCR
         uses: docker/build-push-action@v6
         with:
-          context: ${{ matrix.context }}
-          file: ${{ matrix.file }}
+          context: ./frontend
+          file: ./frontend/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -73,61 +92,139 @@ jobs:
           cache-to: type=gha,mode=max
 
   # ============================================================================
-  # 2. Production Deployment: Verify Manifests & Trigger Cloud Deployments
+  # 2. Build and Publish Backend Container to GHCR (Only if backend changed)
+  # ============================================================================
+  publish-backend:
+    name: Publish Container / Backend
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch' }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry (GHCR)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}/drch_backend
+          tags: |
+            type=raw,value=latest
+            type=sha,format=short,prefix=sha-
+
+      - name: Build and push verified container to GHCR
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ============================================================================
+  # 3. Build and Publish AI Workers Container to GHCR (Only if ai-workers changed)
+  # ============================================================================
+  publish-ai-workers:
+    name: Publish Container / AI Workers
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.ai-workers == 'true' || github.event_name == 'workflow_dispatch' }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry (GHCR)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}/drch_ai_workers
+          tags: |
+            type=raw,value=latest
+            type=sha,format=short,prefix=sha-
+
+      - name: Build and push verified container to GHCR
+        uses: docker/build-push-action@v6
+        with:
+          context: ./ai-workers
+          file: ./ai-workers/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ============================================================================
+  # 4. Production Deployment: Trigger Respective Deployments
   # ============================================================================
   deploy:
-    name: Continuous Deployment / Deploy to Production
+    name: Deploy to Production
     runs-on: ubuntu-latest
-    needs: publish-containers
+    needs: [detect-changes, publish-frontend, publish-backend, publish-ai-workers]
+    if: always() && (needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.ai-workers == 'true' || github.event_name == 'workflow_dispatch')
     environment:
       name: production
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Verify Deployment Manifest & Production Readiness
-        run: |
-          echo "========================================================"
-          echo "Initiating automated deployment sequence for commit: ${{ github.sha }}"
-          echo "Repository: ${{ github.repository }}"
-          echo "Target Registry: ghcr.io/${{ github.repository }}"
-          echo "========================================================"
-          if [ -f "docker-compose.prod.yml" ]; then
-            echo "Production Docker Compose manifest verified: docker-compose.prod.yml"
-          else
-            echo "Missing docker-compose.prod.yml manifest"
-            exit 1
-          fi
-          echo "Production deployment readiness verification complete."
-
-      - name: Trigger Vercel Production Deployment (Frontend)
+      - name: Trigger Vercel Production Deployment (Frontend Only)
+        if: ${{ needs.detect-changes.outputs.frontend == 'true' || github.event_name == 'workflow_dispatch' }}
         env:
-          VERCEL_HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
+          VERCEL_HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
         run: |
           if [ -n "$VERCEL_HOOK" ]; then
-            echo "Triggering Vercel production build via Deploy Hook..."
+            echo "🚀 Triggering Vercel frontend deployment..."
             response=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$VERCEL_HOOK")
             if [ "$response" -ge 200 ] && [ "$response" -lt 300 ]; then
               echo "✅ Successfully dispatched Vercel build (HTTP $response)."
             else
-              echo "⚠️ Vercel hook responded with HTTP $response. Please check secret VERCEL_DEPLOY_HOOK_URL."
+              echo "⚠️ Vercel hook responded with HTTP $response. Please check secret VERCEL_DEPLOY_HOOK."
             fi
           else
-            echo "ℹ️ VERCEL_DEPLOY_HOOK_URL secret not set. Skipping automated Vercel trigger."
+            echo "ℹ️ VERCEL_DEPLOY_HOOK secret not set. Skipping Vercel trigger."
           fi
 
-      - name: Trigger Render Production Deployment (Backend API)
+      - name: Trigger Render Production Deployment (Backend Only)
+        if: ${{ needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.ai-workers == 'true' || github.event_name == 'workflow_dispatch' }}
         env:
-          RENDER_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+          RENDER_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
         run: |
           if [ -n "$RENDER_HOOK" ]; then
-            echo "Triggering Render backend deployment via Deploy Hook..."
+            echo "🚀 Triggering Render backend deployment..."
             response=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$RENDER_HOOK")
             if [ "$response" -ge 200 ] && [ "$response" -lt 300 ]; then
               echo "✅ Successfully dispatched Render deployment (HTTP $response)."
             else
-              echo "⚠️ Render hook responded with HTTP $response. Please check secret RENDER_DEPLOY_HOOK_URL."
+              echo "⚠️ Render hook responded with HTTP $response. Please check secret RENDER_DEPLOY_HOOK."
             fi
           else
-            echo "ℹ️ RENDER_DEPLOY_HOOK_URL secret not set. Skipping automated Render trigger."
+            echo "ℹ️ RENDER_DEPLOY_HOOK secret not set. Skipping Render trigger."
           fi

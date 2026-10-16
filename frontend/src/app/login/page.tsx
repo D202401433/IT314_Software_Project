@@ -1,38 +1,52 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ResQProvider, useResQ } from "../../context/ResQContext";
 import { PortalRoleCategory, UserProfile } from "../../types/resq";
 import { DEMO_USERS } from "../../services/resqStorage";
+import { StaffSignIn } from "./staff-sign-in";
+import { backendLogin, checkBackendHealth } from "../../services/authApi";
+
+// Administrator (Command & Dispatch) signs in against the backend; other tabs keep the demo flow.
+const usesStaffSignIn = (category: PortalRoleCategory): boolean => category === "admin";
 
 function LoginPageContent() {
   const router = useRouter();
   const { login, allUsers } = useResQ();
+  // Protected workspace redirects arrive as /login?next=/dm...; open the staff tab for them.
+  const next = useSearchParams().get("next") ?? undefined;
 
-  const [selectedCategory, setSelectedCategory] = useState<PortalRoleCategory>("user");
+  const [selectedCategory, setSelectedCategory] = useState<PortalRoleCategory>(next?.startsWith("/dm") ? "admin" : "user");
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [backendConnected, setBackendConnected] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    checkBackendHealth().then((isHealthy) => setBackendConnected(isHealthy));
+  }, []);
 
   const handleCategoryChange = (cat: PortalRoleCategory) => {
     setSelectedCategory(cat);
     setErrorMsg(null);
   };
 
-  const handleQuickDemoLogin = (user: UserProfile) => {
+  const handleQuickDemoLogin = async (user: UserProfile) => {
     setErrorMsg(null);
     setSuccessMsg(`Signing in as ${user.name} (${user.role})...`);
+    // Attempt backend sync in background
+    backendLogin(user.email, user.password || "").catch(() => {});
     setTimeout(() => {
       login(user);
       router.push("/");
     }, 450);
   };
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
 
@@ -44,28 +58,55 @@ function LoginPageContent() {
       return;
     }
 
-    const found = allUsers.find(
+    // Find in local memory / storage
+    const localMatch = allUsers.find(
       (u) =>
         u.email.toLowerCase() === identifier ||
         u.id.toLowerCase() === identifier ||
         (u.badgeNumber && u.badgeNumber.toLowerCase() === identifier)
     );
 
-    if (!found) {
-      setErrorMsg(`No account found matching "${identifier}". You can use the Quick Demo buttons below or Sign Up.`);
+    // 1. Attempt Backend API Authentication (sharing profile info if recognized locally)
+    const apiRes = await backendLogin(
+      identifier,
+      password,
+      localMatch
+        ? {
+            role: localMatch.role,
+            name: localMatch.name,
+            agency: localMatch.agency,
+          }
+        : undefined
+    );
+
+    if (apiRes.success && apiRes.user) {
+      setSuccessMsg(`✓ Authenticated via FastAPI Gateway! Welcome back, ${apiRes.user.name}!`);
+      setTimeout(() => {
+        login(apiRes.user!);
+        router.push("/");
+      }, 400);
       return;
     }
 
-    if (found.password && password && found.password !== password) {
-      setErrorMsg("Incorrect password. Try using the 1-Click Quick Login below.");
+    // 2. Seamless Local Fallback (Guarantees zero downtime if backend is offline or syncing)
+    if (localMatch) {
+      if (localMatch.password && password && localMatch.password !== password) {
+        setErrorMsg("Incorrect password. Try using the 1-Click Quick Login below.");
+        return;
+      }
+      setSuccessMsg(`Welcome back, ${localMatch.name}! Loading ${localMatch.role} dashboard...`);
+      setTimeout(() => {
+        login(localMatch);
+        router.push("/");
+      }, 400);
       return;
     }
 
-    setSuccessMsg(`Welcome back, ${found.name}! Loading ${found.role} dashboard...`);
-    setTimeout(() => {
-      login(found);
-      router.push("/");
-    }, 400);
+    // 3. Neither backend nor local matched
+    setErrorMsg(
+      apiRes.error ||
+        `No account found matching "${identifier}". You can use the Quick Demo buttons below or Sign Up.`
+    );
   };
 
   const demoPresets = DEMO_USERS.filter((u) => {
@@ -102,12 +143,26 @@ function LoginPageContent() {
           </div>
         </Link>
 
-        <Link
-          href="/"
-          className="text-xs bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-full transition flex items-center gap-1.5"
-        >
-          <span>←</span> Return to General Dashboard
-        </Link>
+        <div className="flex items-center gap-3">
+          {backendConnected !== null && (
+            <span
+              className={`text-[10px] px-2.5 py-1 rounded-full font-medium border flex items-center gap-1.5 ${
+                backendConnected
+                  ? "bg-emerald-950/70 text-emerald-300 border-emerald-500/50"
+                  : "bg-amber-950/70 text-amber-300 border-amber-500/50"
+              }`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${backendConnected ? "bg-emerald-400" : "bg-amber-400"}`}></span>
+              {backendConnected ? "FastAPI Online" : "Offline Demo"}
+            </span>
+          )}
+          <Link
+            href="/"
+            className="text-xs bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-full transition flex items-center gap-1.5"
+          >
+            <span>←</span> Return to General Dashboard
+          </Link>
+        </div>
       </header>
 
       {/* Main Container */}
@@ -184,7 +239,8 @@ function LoginPageContent() {
             </div>
           </div>
 
-          {/* Quick 1-Click Demo */}
+          {/* Quick 1-Click Demo (not offered for Administrator: staff use real authentication) */}
+          {!usesStaffSignIn(selectedCategory) && (
           <div className="p-3 bg-slate-900/90 rounded-xl border border-slate-800">
             <div className="flex items-center justify-between mb-2">
               <span className="text-[11px] font-bold text-amber-400 flex items-center gap-1">
@@ -206,6 +262,7 @@ function LoginPageContent() {
               ))}
             </div>
           </div>
+          )}
 
           {errorMsg && (
             <div className="p-3 bg-red-950/80 border border-red-700/60 rounded-xl text-red-200 text-xs flex items-center gap-2">
@@ -221,6 +278,9 @@ function LoginPageContent() {
           )}
 
           {/* Form */}
+          {usesStaffSignIn(selectedCategory) ? (
+            <StaffSignIn next={next} />
+          ) : (
           <form onSubmit={handleLoginSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1">
@@ -269,6 +329,7 @@ function LoginPageContent() {
               <span>→</span>
             </button>
           </form>
+          )}
 
           {/* Footer Navigation */}
           <div className="pt-3 border-t border-slate-800 text-center text-xs text-slate-400 space-y-2">
@@ -298,7 +359,9 @@ function LoginPageContent() {
 export default function LoginPage() {
   return (
     <ResQProvider>
-      <LoginPageContent />
+      <Suspense fallback={null}>
+        <LoginPageContent />
+      </Suspense>
     </ResQProvider>
   );
 }

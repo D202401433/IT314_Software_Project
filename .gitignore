@@ -1,63 +1,153 @@
 # ==============================================================================
-# Disaster Response Coordination Hub (DRCH) - Global .gitignore
+# Disaster Response Coordination Hub (DRCH) - Master .gitignore
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
-# 1. Frontend (Next.js / Node.js)
+# 1. Environment Variables, Credentials & Secrets (NEVER COMMIT)
 # ------------------------------------------------------------------------------
-# Dependencies
+.env
+.env.*
+*.env
+!.env.example
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.pem
+*.key
+*.crt
+*.cert
+*.pfx
+*.p12
+docker-compose.override.yml
+
+# ------------------------------------------------------------------------------
+# 2. Frontend (Next.js / React / TypeScript / Node.js)
+# ------------------------------------------------------------------------------
+node_modules/
+**/node_modules/
 frontend/node_modules/
-frontend/.pnp
-frontend/.pnp.js
 
-# Testing
-frontend/coverage/
-
-# Next.js Build Output
+# Next.js Build Output & Cache
+.next/
+**/.next/
 frontend/.next/
+out/
+**/out/
 frontend/out/
+build/
+**/build/
 frontend/build/
+dist/
+**/dist/
+
+# Package manager files & caches
+.pnp
+.pnp.js
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.pnpm-store/
+
+# TypeScript & Vercel / Turbopack
+*.tsbuildinfo
+next-env.d.ts
+.vercel/
+**/.vercel/
+.turbo/
+**/.turbo/
 
 # ------------------------------------------------------------------------------
-# 2. Backend & AI-Workers (Python)
+# 3. Backend, Python & AI Workers
 # ------------------------------------------------------------------------------
 # Byte-compiled / optimized / DLL files
 __pycache__/
+**/__pycache__/
 *.py[cod]
 *$py.class
-
-# C extensions
+*.pyo
+*.pyd
 *.so
-
-# Distribution / packaging
 .Python
-build/
+
+# Virtual Environments (CRITICAL - Keeps repository lightweight)
+.venv/
+**/.venv/
+venv/
+**/venv/
+env/
+**/env/
+ENV/
+env.bak/
+venv.bak/
+.env/
+backend/.venv/
+backend/venv/
+ai-workers/.venv/
+ai-workers/venv/
+
+# Python packaging & distribution
 develop-eggs/
-dist/
-downloads/
-eggs/
 .eggs/
-lib/
-lib64/
+*.egg-info/
+*.egg
 parts/
-sdist/
 var/
 wheels/
 share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-
-# PyInstaller
 *.manifest
 *.spec
 
-# Installer logs
+# Jupyter Notebook Checkpoints & Outputs
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+*/.ipynb_checkpoints/*
+
+# Machine Learning Large Artifacts & Model Checkpoints
+*.pt
+*.pth
+*.onnx
+*.bin
+*.safetensors
+*.ckpt
+*.h5
+
+# ------------------------------------------------------------------------------
+# 4. Databases, Local Storage & State Files
+# ------------------------------------------------------------------------------
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+*.rdb
+backend/db/*.db
+local_data/
+
+# ------------------------------------------------------------------------------
+# 5. Logs, Diagnostics & Temp Files
+# ------------------------------------------------------------------------------
+*.log
+logs/
+**/logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
 pip-log.txt
 pip-delete-this-directory.txt
+celerybeat-schedule
+celerybeat.pid
 
-# Unit test / coverage reports
+# Testing & Coverage
+coverage/
+**/coverage/
+frontend/coverage/
 htmlcov/
 .tox/
 .nox/
@@ -67,58 +157,30 @@ htmlcov/
 nosetests.xml
 coverage.xml
 *.cover
-*.sfdx
 .hypothesis/
 .pytest_cache/
 cover/
 
-# Virtual Environments (CRITICAL)
-venv/
-env/
-ENV/
-env.bak/
-venv.bak/
-.env/
-.venv/
-backend/venv/
-backend/.venv/
-ai-workers/venv/
-ai-workers/.venv/
-pip-wheel-metadata/
-
-# FastAPI/Uvicorn/Celery/Kafka/Redis logs
-*.log
-celerybeat-schedule
-celerybeat.pid
+# Scratch & Audit files
+scratch/
+scratch_*.*
+audit.json
+frontend/audit.json
 
 # ------------------------------------------------------------------------------
-# 3. Environment Variables & Secrets
-# ------------------------------------------------------------------------------
-.env
-.env.*
-!.env.example
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-docker-compose.override.yml
-
-# ------------------------------------------------------------------------------
-# 4. OS / IDE / Editor Files
+# 6. Operating System Artifacts
 # ------------------------------------------------------------------------------
 # Windows
 Thumbs.db
 Thumbs.db:encryptable
 ehthumbs.db
 ehthumbs_vista.db
-*.stackdump
 [Dd]esktop.ini
 $RECYCLE.BIN/
+*.stackdump
 *.cab
 *.msi
 *.msix
-*.msm
-*.msp
 *.lnk
 
 # macOS
@@ -135,14 +197,32 @@ Icon
 .VolumeIcon.icns
 .com.apple.timemachine.donotpresent
 
-# IDEs (VSCode, PyCharm, etc.)
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+
+# ------------------------------------------------------------------------------
+# 7. IDEs & Code Editors
+# ------------------------------------------------------------------------------
+# Visual Studio Code (keeps team recommended configs, ignores workspace state)
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
+.history/
+*.code-workspace
+
+# JetBrains (PyCharm, WebStorm, IntelliJ)
 .idea/
+*.iws
+*.iml
+
+# Vim / Emacs / Sublime
 *.swp
 *.swo
-*~
+*.sublime-project
+*.sublime-workspace
 .jupyter/
