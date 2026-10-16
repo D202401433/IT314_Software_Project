@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useResQ } from "../context/ResQContext";
 import { IncidentRecord, ResponderUnitRecord } from "../types/resq";
 
@@ -17,24 +17,20 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
 }) => {
   const { responders, dispatchUnit, activeRole, incidents } = useResQ();
 
-  const [selectedIncidentId, setSelectedIncidentId] = useState<string>("");
+  const [overrideIncidentId, setOverrideIncidentId] = useState<string | null>(null);
   const [selectedUnitId, setSelectedUnitId] = useState<string>("");
   const [customEta, setCustomEta] = useState<number>(12);
   const [notes, setNotes] = useState<string>("");
   const [overrideBusy, setOverrideBusy] = useState<boolean>(false);
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  useEffect(() => {
-    if (incident) {
-      setSelectedIncidentId(incident.id);
-    } else if (incidents.length > 0 && !selectedIncidentId) {
-      setSelectedIncidentId(incidents[0].id);
-    }
-  }, [incident, incidents, selectedIncidentId]);
-
   if (!isOpen) return null;
 
-  const activeIncident = incidents.find((i) => i.id === selectedIncidentId) || incident || incidents[0];
+  const activeIncident =
+    (overrideIncidentId ? incidents.find((i) => i.id === overrideIncidentId) : null) ||
+    incident ||
+    incidents[0] ||
+    null;
   if (!activeIncident) return null;
 
   // Capability matching logic
@@ -175,8 +171,8 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
             <div className="flex items-center justify-between gap-3 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
               <span className="text-xs font-semibold text-slate-600 shrink-0">Target Incident:</span>
               <select
-                value={selectedIncidentId}
-                onChange={(e) => setSelectedIncidentId(e.target.value)}
+                value={activeIncident.id}
+                onChange={(e) => setOverrideIncidentId(e.target.value)}
                 className="bg-white border border-slate-200 text-xs font-medium text-slate-800 rounded-lg px-2.5 py-1.5 outline-none cursor-pointer w-full max-w-md focus:border-[#075cab]"
               >
                 {incidents.map((inc) => (
