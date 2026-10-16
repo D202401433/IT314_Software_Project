@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useResQ } from "../context/ResQContext";
 import { IncidentRecord, ResponderUnitRecord } from "../types/resq";
 
@@ -15,53 +15,72 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
   isOpen,
   onClose,
 }) => {
-  const { responders, dispatchUnit, activeRole } = useResQ();
+  const { responders, dispatchUnit, activeRole, incidents } = useResQ();
+
+  const [selectedIncidentId, setSelectedIncidentId] = useState<string>("");
   const [selectedUnitId, setSelectedUnitId] = useState<string>("");
   const [customEta, setCustomEta] = useState<number>(12);
   const [notes, setNotes] = useState<string>("");
   const [overrideBusy, setOverrideBusy] = useState<boolean>(false);
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  if (!isOpen || !incident) return null;
+  useEffect(() => {
+    if (incident) {
+      setSelectedIncidentId(incident.id);
+    } else if (incidents.length > 0 && !selectedIncidentId) {
+      setSelectedIncidentId(incidents[0].id);
+    }
+  }, [incident, incidents, selectedIncidentId]);
+
+  if (!isOpen) return null;
+
+  const activeIncident = incidents.find((i) => i.id === selectedIncidentId) || incident || incidents[0];
+  if (!activeIncident) return null;
 
   // Capability matching logic
-  const getSuitabilityScore = (unit: ResponderUnitRecord): { score: number; reason: string } => {
+  const getSuitabilityScore = (unit: ResponderUnitRecord): { score: number; label: string } => {
     let score = 0;
-    const reasons: string[] = [];
 
-    if (incident.category === "Major Urban / Building Fire") {
-      if (unit.callsign.includes("FIRE") || unit.capabilities.some(c => c.toLowerCase().includes("fire") || c.toLowerCase().includes("smoke") || c.toLowerCase().includes("thermal"))) {
+    if (activeIncident.category === "Major Urban / Building Fire") {
+      if (
+        unit.callsign.includes("FIRE") ||
+        unit.capabilities.some((c) => c.toLowerCase().includes("fire") || c.toLowerCase().includes("thermal"))
+      ) {
         score += 60;
-        reasons.push("Fire suppression capability");
       }
-    } else if (incident.category === "Flood / Urban Flood" || incident.category === "Cyclone / Coastal Flooding") {
-      if (unit.callsign.includes("RESCUE") || unit.agency.includes("NDRF") || unit.capabilities.some(c => c.toLowerCase().includes("boat") || c.toLowerCase().includes("flood") || c.toLowerCase().includes("cyclone") || c.toLowerCase().includes("diver"))) {
+    } else if (
+      activeIncident.category === "Flood / Urban Flood" ||
+      activeIncident.category === "Cyclone / Coastal Flooding"
+    ) {
+      if (
+        unit.callsign.includes("RESCUE") ||
+        unit.agency.includes("NDRF") ||
+        unit.capabilities.some((c) => c.toLowerCase().includes("boat") || c.toLowerCase().includes("diver"))
+      ) {
         score += 60;
-        reasons.push("Flood/Disaster water rescue capability");
       }
     }
 
-    if (incident.urgentNeeds.some(n => n.toLowerCase().includes("medic") || n.toLowerCase().includes("casualt") || n.toLowerCase().includes("injur"))) {
+    if (
+      activeIncident.urgentNeeds.some(
+        (n) => n.toLowerCase().includes("medic") || n.toLowerCase().includes("casualt") || n.toLowerCase().includes("injur")
+      )
+    ) {
       if (unit.callsign.includes("AMB") || unit.role === "Medic / Ambulance Team") {
         score += 40;
-        reasons.push("Immediate medical evacuation match");
       }
-    }
-
-    if (unit.capabilities.some(c => c.toLowerCase().includes("drone") || c.toLowerCase().includes("recon"))) {
-      score += 20;
-      reasons.push("Aerial reconnaissance capability");
     }
 
     if (unit.status === "AVAILABLE") {
       score += 30;
-      reasons.push("Unit currently AVAILABLE");
     } else {
       score -= 20;
-      reasons.push(`Status: ${unit.status}`);
     }
 
-    return { score, reason: reasons.join(" • ") };
+    return {
+      score,
+      label: score >= 60 ? "Best Match" : score >= 30 ? "Good Match" : "Standard",
+    };
   };
 
   // Sort responders by suitability
@@ -73,132 +92,168 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
 
   const handleConfirmDispatch = () => {
     if (!selectedUnit) {
-      setFeedbackMsg({ type: "error", text: "Please select an emergency response unit to dispatch." });
+      setFeedbackMsg({ type: "error", text: "Please select a response unit to dispatch." });
       return;
     }
 
     if (selectedUnit.status !== "AVAILABLE" && !overrideBusy) {
       setFeedbackMsg({
         type: "error",
-        text: `Unit ${selectedUnit.callsign} is currently ${selectedUnit.status}. Enable authorized override to dispatch.`,
+        text: `Unit ${selectedUnit.callsign} is ${selectedUnit.status}. Check authorize preemption below to proceed.`,
       });
       return;
     }
 
     try {
-      dispatchUnit(incident.id, selectedUnit.id, customEta, notes || `Dispatched to ${incident.locationName}`);
+      dispatchUnit(activeIncident.id, selectedUnit.id, customEta, notes || `Dispatched to ${activeIncident.locationName}`);
       setFeedbackMsg({
         type: "success",
-        text: `Successfully dispatched ${selectedUnit.callsign} (${selectedUnit.personnelName}) with simulated ETA ${customEta} mins.`,
+        text: `Dispatched ${selectedUnit.callsign} (${selectedUnit.personnelName}) with ${customEta}m ETA.`,
       });
       setTimeout(() => {
         setFeedbackMsg(null);
         setSelectedUnitId("");
         setNotes("");
         onClose();
-      }, 1200);
+      }, 1000);
     } catch (err: any) {
       setFeedbackMsg({ type: "error", text: err.message || "Dispatch operation failed." });
     }
   };
 
   return (
-    <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
-      <div className="bg-[#0f172a] border border-[#1e293b] text-slate-100 rounded-lg shadow-2xl max-w-2xl w-full flex flex-col max-h-[90vh] overflow-hidden">
+    <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+      <div className="bg-white border border-slate-200 text-slate-800 rounded-2xl shadow-2xl max-w-2xl w-full flex flex-col max-h-[90vh] overflow-hidden">
         {/* Header */}
-        <div className="px-5 py-4 bg-linear-to-r from-red-950/70 via-slate-900 to-slate-900 border-b border-red-900/30 flex items-center justify-between">
+        <div className="px-6 py-4 border-b border-slate-200 bg-white flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-md bg-red-600/20 border border-red-500/40 flex items-center justify-center text-red-400 font-bold text-lg">
+            <div className="w-10 h-10 rounded-xl bg-red-50 border border-red-200 flex items-center justify-center text-red-600 text-lg shadow-2xs shrink-0">
               🚨
             </div>
             <div>
-              <h2 className="text-base font-bold text-white tracking-wide flex items-center gap-2">
-                EMERGENCY DISPATCH CENTER
-                <span className="text-[10px] bg-red-500/20 text-red-300 border border-red-500/30 px-2 py-0.5 rounded font-mono">
-                  {incident.id}
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-slate-900 tracking-tight">
+                  Emergency Dispatch
+                </h2>
+                <span className="text-xs bg-red-50 text-red-700 border border-red-200 px-2 py-0.5 rounded-md font-mono font-semibold">
+                  {activeIncident.id}
                 </span>
-              </h2>
-              <p className="text-xs text-slate-400">
-                Incident: {incident.title} ({incident.locationName})
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5 truncate max-w-md">
+                {activeIncident.title} • {activeIncident.locationName}
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white hover:bg-slate-800 p-1.5 rounded transition text-sm"
+            aria-label="Close modal"
+            className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 p-2 rounded-lg transition cursor-pointer text-sm"
           >
             ✕
           </button>
         </div>
 
         {/* Content Body */}
-        <div className="p-5 overflow-y-auto space-y-4 flex-1">
+        <div className="p-6 overflow-y-auto space-y-4 flex-1">
           {feedbackMsg && (
             <div
-              className={`p-3 rounded-md text-xs font-medium border flex items-center justify-between ${
+              className={`p-3 rounded-xl text-xs font-medium border flex items-center justify-between ${
                 feedbackMsg.type === "success"
-                  ? "bg-emerald-950/40 border-emerald-500/40 text-emerald-300"
-                  : "bg-red-950/40 border-red-500/40 text-red-300"
+                  ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                  : "bg-red-50 border-red-200 text-red-800"
               }`}
             >
               <span>{feedbackMsg.text}</span>
-              <button onClick={() => setFeedbackMsg(null)} className="ml-2 hover:opacity-75">✕</button>
+              <button onClick={() => setFeedbackMsg(null)} className="ml-2 hover:opacity-75 cursor-pointer font-bold">
+                ✕
+              </button>
             </div>
           )}
 
-          {/* Incident Overview Banner */}
-          <div className="bg-slate-900/90 border border-slate-800 rounded-md p-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+          {/* Incident Selector (if multiple incidents available) */}
+          {incidents.length > 1 && (
+            <div className="flex items-center justify-between gap-3 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+              <span className="text-xs font-semibold text-slate-600 shrink-0">Target Incident:</span>
+              <select
+                value={selectedIncidentId}
+                onChange={(e) => setSelectedIncidentId(e.target.value)}
+                className="bg-white border border-slate-200 text-xs font-medium text-slate-800 rounded-lg px-2.5 py-1.5 outline-none cursor-pointer w-full max-w-md focus:border-[#075cab]"
+              >
+                {incidents.map((inc) => (
+                  <option key={inc.id} value={inc.id}>
+                    {inc.id} — {inc.title} ({inc.locationName})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Incident Overview Strip */}
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
             <div>
-              <span className="text-slate-400 block text-[10px] uppercase font-semibold">Category</span>
-              <span className="font-semibold text-amber-400">{incident.category}</span>
+              <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider">Category</span>
+              <span className="font-semibold text-slate-800 truncate block mt-0.5">{activeIncident.category}</span>
             </div>
             <div>
-              <span className="text-slate-400 block text-[10px] uppercase font-semibold">Severity</span>
-              <span className={`font-semibold ${incident.severity === "CRITICAL" ? "text-red-400" : "text-orange-400"}`}>
-                {incident.severity}
+              <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider">Severity</span>
+              <span
+                className={`font-bold mt-0.5 block ${
+                  activeIncident.severity === "CRITICAL" ? "text-red-600" : "text-amber-600"
+                }`}
+              >
+                {activeIncident.severity}
               </span>
             </div>
             <div>
-              <span className="text-slate-400 block text-[10px] uppercase font-semibold">Est. Casualties</span>
-              <span className="font-semibold text-slate-200">{incident.affectedPeopleEstimate} people</span>
+              <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider">Est. Affected</span>
+              <span className="font-semibold text-slate-800 mt-0.5 block">
+                {activeIncident.affectedPeopleEstimate || 0} people
+              </span>
             </div>
             <div>
-              <span className="text-slate-400 block text-[10px] uppercase font-semibold">Priority</span>
-              <span className="font-mono font-bold text-red-300">
-                LEVEL {incident.aiRecommendation?.recommendedPriority || 1}
+              <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider">Priority</span>
+              <span className="font-bold text-red-600 mt-0.5 block">
+                Level {activeIncident.aiRecommendation?.recommendedPriority || 1}
               </span>
             </div>
           </div>
 
-          {/* Urgent Needs & AI Suggestion */}
-          <div className="bg-blue-950/20 border border-blue-900/40 rounded-md p-3 text-xs">
-            <div className="flex items-center gap-1.5 font-semibold text-blue-400 mb-1.5">
-              <span>🤖 NDMA AI Capability Recommendation:</span>
+          {/* AI Capability Recommendation */}
+          {activeIncident.aiRecommendation?.suggestedCapabilities && (
+            <div className="bg-sky-50/60 border border-sky-100 rounded-xl p-3 text-xs">
+              <div className="flex items-center gap-1.5 font-semibold text-[#075cab] mb-1.5">
+                <span>🤖 Recommended Capabilities:</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5 mb-1.5">
+                {activeIncident.aiRecommendation.suggestedCapabilities.slice(0, 3).map((cap, i) => (
+                  <span
+                    key={i}
+                    className="bg-white text-[#075cab] border border-sky-200 px-2 py-0.5 rounded-md text-[11px] font-medium shadow-2xs"
+                  >
+                    ✓ {cap}
+                  </span>
+                ))}
+              </div>
+              {activeIncident.urgentNeeds.length > 0 && (
+                <p className="text-[11px] text-slate-500">
+                  Required: {activeIncident.urgentNeeds.slice(0, 3).join(", ")}
+                </p>
+              )}
             </div>
-            <div className="flex flex-wrap gap-1 mb-2">
-              {incident.aiRecommendation?.suggestedCapabilities?.map((cap, i) => (
-                <span key={i} className="bg-blue-900/50 text-blue-200 border border-blue-700/50 px-2 py-0.5 rounded text-[11px]">
-                  ✓ {cap}
-                </span>
-              ))}
-            </div>
-            <p className="text-[11px] text-slate-400">
-              Needs: {incident.urgentNeeds.join(", ") || "Standard field assistance"}
-            </p>
-          </div>
+          )}
 
-          {/* Responders Selection Queue */}
+          {/* Unit Selection List */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                Select Tactical Response Unit ({responders.length} registered)
+              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Select Response Unit ({responders.length})
               </label>
-              <span className="text-[10px] text-slate-400">Sorted by Capability Fit</span>
+              <span className="text-[11px] text-slate-400 font-medium">Ranked by capability fit</span>
             </div>
 
-            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+            <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
               {sortedResponders.map((unit) => {
-                const { score, reason: _reason } = getSuitabilityScore(unit);
+                const { score, label } = getSuitabilityScore(unit);
                 const isSelected = selectedUnitId === unit.id;
                 const isAvailable = unit.status === "AVAILABLE";
 
@@ -206,50 +261,50 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
                   <div
                     key={unit.id}
                     onClick={() => setSelectedUnitId(unit.id)}
-                    className={`p-3 rounded-md border cursor-pointer transition flex items-start justify-between gap-3 ${
+                    className={`p-3 rounded-xl border cursor-pointer transition flex items-center justify-between gap-3 ${
                       isSelected
-                        ? "bg-blue-950/40 border-blue-500 shadow-md ring-1 ring-blue-500"
-                        : "bg-slate-900/60 border-slate-800 hover:border-slate-700 hover:bg-slate-900"
+                        ? "bg-sky-50/60 border-[#075cab] ring-1 ring-[#075cab] shadow-xs"
+                        : "bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/50"
                     }`}
                   >
-                    <div className="flex items-start gap-2.5">
+                    <div className="flex items-center gap-3">
                       <input
                         type="radio"
                         checked={isSelected}
                         onChange={() => setSelectedUnitId(unit.id)}
-                        className="mt-1 text-blue-600 focus:ring-0"
+                        className="text-[#075cab] focus:ring-0 cursor-pointer"
                       />
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="font-bold text-sm text-white font-mono">{unit.callsign}</span>
-                          <span className="text-xs text-slate-300 font-medium">({unit.personnelName})</span>
+                          <span className="font-bold text-xs text-slate-900 font-mono">{unit.callsign}</span>
+                          <span className="text-xs text-slate-600 font-medium">({unit.personnelName})</span>
                           <span
-                            className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase ${
+                            className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
                               isAvailable
-                                ? "bg-emerald-950 text-emerald-400 border border-emerald-800"
-                                : "bg-amber-950 text-amber-400 border border-amber-800"
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                : "bg-amber-50 text-amber-700 border border-amber-200"
                             }`}
                           >
                             {unit.status}
                           </span>
                         </div>
-                        <div className="text-[11px] text-slate-400 mt-0.5">
+                        <p className="text-[11px] text-slate-500 mt-0.5">
                           {unit.agency} • {unit.vehicleType}
-                        </div>
-                        <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-1">
-                          <span className="text-cyan-400 font-medium">Equipped:</span>{" "}
-                          {unit.capabilities.join(", ")}
-                        </div>
+                        </p>
                       </div>
                     </div>
 
                     <div className="text-right shrink-0">
-                      <div className="text-xs font-bold text-blue-400">
-                        {score > 50 ? "⭐️ High Match" : "Standard"}
-                      </div>
-                      <div className="text-[10px] text-slate-400 font-mono">
+                      <span
+                        className={`text-xs font-semibold ${
+                          score >= 60 ? "text-[#075cab]" : "text-slate-600"
+                        }`}
+                      >
+                        {label}
+                      </span>
+                      <p className="text-[11px] text-slate-400 font-mono mt-0.5">
                         ~{10 + (unit.callsign.length % 7)} min ETA
-                      </div>
+                      </p>
                     </div>
                   </div>
                 );
@@ -259,15 +314,15 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
 
           {/* Dispatch Assignment Details */}
           {selectedUnit && (
-            <div className="bg-slate-900 border border-slate-800 rounded-md p-3 space-y-3">
-              <h4 className="text-xs font-bold text-slate-200 uppercase">
-                Dispatch Parameters for {selectedUnit.callsign}
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-3">
+              <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Mission Parameters for {selectedUnit.callsign}
               </h4>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                 <div>
-                  <label className="block text-[11px] font-medium text-slate-400 mb-1">
-                    Simulated Route ETA (Minutes)
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                    Route ETA (Minutes)
                   </label>
                   <input
                     type="number"
@@ -275,50 +330,47 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
                     max="120"
                     value={customEta}
                     onChange={(e) => setCustomEta(Number(e.target.value))}
-                    className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500"
+                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 outline-none focus:border-[#075cab]"
                   />
-                  <span className="text-[10px] text-slate-400 mt-0.5 block">
-                    Calculated via simulated road network routing.
-                  </span>
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-medium text-slate-400 mb-1">
-                    Operational Channel / Caller
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                    Direct Contact
                   </label>
                   <input
                     type="text"
                     readOnly
                     value={`${selectedUnit.phone} (${selectedUnit.agency})`}
-                    className="w-full bg-slate-950/60 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-300 font-mono"
+                    className="w-full bg-slate-100 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-600 font-mono"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-[11px] font-medium text-slate-400 mb-1">
-                  Tactical Dispatch Instructions & Briefing
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                  Briefing Notes (Optional)
                 </label>
-                <textarea
-                  rows={2}
-                  placeholder="e.g. Proceed via Highway 44 avoiding flooded bypass. Coordinate with NDRF Sector 2."
+                <input
+                  type="text"
+                  placeholder="e.g. Proceed via Highway 44. Avoid flooded underpass."
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 resize-none"
+                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 outline-none focus:border-[#075cab]"
                 />
               </div>
 
               {selectedUnit.status !== "AVAILABLE" && (
-                <div className="bg-amber-950/30 border border-amber-900/50 p-2 rounded flex items-center gap-2">
+                <div className="bg-amber-50 border border-amber-200 p-2.5 rounded-lg flex items-center gap-2">
                   <input
                     type="checkbox"
                     id="overrideBusy"
                     checked={overrideBusy}
                     onChange={(e) => setOverrideBusy(e.target.checked)}
-                    className="text-amber-500"
+                    className="text-amber-600 rounded cursor-pointer"
                   />
-                  <label htmlFor="overrideBusy" className="text-[11px] text-amber-300 cursor-pointer">
-                    Authorize Priority Reassignment / Preemption (Unit is currently {selectedUnit.status})
+                  <label htmlFor="overrideBusy" className="text-xs text-amber-800 font-medium cursor-pointer">
+                    Authorize preemption (Unit is currently {selectedUnit.status})
                   </label>
                 </div>
               )}
@@ -327,23 +379,23 @@ export const DispatchModal: React.FC<DispatchModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-3 bg-slate-900 border-t border-slate-800 flex items-center justify-between">
-          <div className="text-[11px] text-slate-400 font-mono">
-            Dispatcher: <span className="text-slate-300 font-bold">{activeRole}</span>
+        <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+          <div className="text-xs text-slate-500 font-medium">
+            Dispatcher: <strong className="text-slate-800">{activeRole}</strong>
           </div>
           <div className="flex gap-2">
             <button
               onClick={onClose}
-              className="px-3.5 py-1.5 rounded text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 transition"
+              className="px-4 py-2 rounded-lg text-xs font-semibold text-slate-600 bg-white border border-slate-200 hover:bg-slate-100 transition cursor-pointer shadow-2xs"
             >
               Cancel
             </button>
             <button
               onClick={handleConfirmDispatch}
               disabled={!selectedUnitId}
-              className="px-4 py-1.5 rounded text-xs font-bold text-white bg-red-600 hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed shadow transition flex items-center gap-1.5"
+              className="px-5 py-2 rounded-lg text-xs font-bold text-white bg-[#075cab] hover:bg-[#064a85] disabled:opacity-50 disabled:cursor-not-allowed shadow-xs transition cursor-pointer flex items-center gap-1.5"
             >
-              <span>🚀</span> Confirm & Transmit Dispatch
+              <span>🚀</span> Confirm & Dispatch
             </button>
           </div>
         </div>
