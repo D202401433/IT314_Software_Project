@@ -33,8 +33,6 @@ from app.services.dispatch import escalate_overdue
 logger = logging.getLogger("drch.backend")
 logging.basicConfig(level=logging.INFO)
 
-<<<<<<< HEAD
-
 # ═══════════════════════════════════════════════════════════════════
 # Auth dependency — extracts user identity from request headers.
 # The frontend sends X-User-Id and X-User-Role after client-side login.
@@ -53,14 +51,10 @@ async def get_current_citizen(
 
 
 # ═══════════════════════════════════════════════════════════════════
-# Existing background worker (preserved)
+# Background worker configuration
 # ═══════════════════════════════════════════════════════════════════
 
-=======
 WORKER_INTERVAL_SECONDS = 60
-
-
->>>>>>> main
 async def ai_workers_background_consumer():
     """
     In-process worker consumer loop:
@@ -82,13 +76,9 @@ async def ai_workers_background_consumer():
         logger.info("AI Worker consumer stopped gracefully.")
 
 
-<<<<<<< HEAD
 # ═══════════════════════════════════════════════════════════════════
 # Application Lifespan (startup / shutdown)
 # ═══════════════════════════════════════════════════════════════════
-
-=======
->>>>>>> main
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: initialize database and spawn worker task
@@ -139,7 +129,6 @@ def health_check():
     return {'status': 'healthy', 'service': 'drch-backend'}
 
 
-<<<<<<< HEAD
 # ═══════════════════════════════════════════════════════════════════
 # CITIZEN REPORT ENDPOINTS (authenticated)
 # ═══════════════════════════════════════════════════════════════════
@@ -268,7 +257,8 @@ async def list_shelters():
     with capacity and contact information.
     """
     return get_shelters()
-=======
+
+
 @app.get('/api/v1/health')
 def api_health():
     """Liveness plus database reachability (SRS s.15.6)."""
@@ -282,4 +272,3 @@ def api_health():
             logger.exception("Database health check failed")
             database = "unavailable"
     return {'status': 'healthy', 'service': 'drch-backend', 'database': database}
->>>>>>> main
