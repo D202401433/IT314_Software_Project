@@ -338,4 +338,14 @@ jobs:
             exit 1
           fi
           echo "CI check PASSED: all required validation and security jobs succeeded."
-      
+
+      - name: Deploy Verified Preview to Vercel
+        if: github.event_name == 'pull_request' && needs.detect-changes.outputs.frontend == 'true'
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          working-directory: ./frontend
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-comment: true
