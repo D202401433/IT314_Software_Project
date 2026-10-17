@@ -151,6 +151,26 @@ body {
     outline-offset: 2px;
   }
 
-  .dm-theme dialog::backdrop {
-    background: rgb(2 6 23 / 0.7);
-  }
+.dm-theme dialog::backdrop {
+  background: rgb(2 6 23 / 0.7);
+}
+
+/* ============ LEAFLET MARKERS & CONTROLS INTERACTION ============ */
+.leaflet-container {
+  cursor: grab;
+}
+
+.leaflet-container.leaflet-drag-target {
+  cursor: grabbing;
+}
+
+.leaflet-marker-icon,
+.resq-incident-marker,
+.resq-unit-marker {
+  pointer-events: auto !important;
+  cursor: pointer !important;
+}
+
+.leaflet-control {
+  pointer-events: auto !important;
+}
