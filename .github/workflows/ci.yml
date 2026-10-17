@@ -1,11 +1,10 @@
 name: Continuous Integration (CI)
 
 on:
-  push:
-    branches-ignore: [ "main" ]
   pull_request:
+    branches: [ "main" ]
   workflow_dispatch:
-
+    
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -339,3 +338,5 @@ jobs:
             exit 1
           fi
           echo "CI check PASSED: all required validation and security jobs succeeded."
+
+
