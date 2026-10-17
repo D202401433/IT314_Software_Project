@@ -1,13 +1,13 @@
 services:
   - type: web
     name: drch-backend
-    runtime: docker
-    dockerfilePath: ./backend/Dockerfile
-    dockerContext: ./backend
+    runtime: image
+    image:
+      url: ghcr.io/siddhcreator-1706/it314_software_project/drch_backend:latest
     plan: free
     region: ohio
     autoDeploy: false
-    rootDir: backend
+
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL

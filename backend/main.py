@@ -40,6 +40,14 @@ async def ai_workers_background_consumer():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Startup: ensure database schema migrations are applied
+    if get_settings().database_url:
+        try:
+            from app.migrate import apply_migrations
+            await asyncio.to_thread(apply_migrations)
+        except Exception:
+            logger.exception("Database migration failed on startup")
+
     # Startup: spawn worker task in background
     worker_task = asyncio.create_task(ai_workers_background_consumer())
     yield
@@ -50,6 +58,7 @@ async def lifespan(app: FastAPI):
     except asyncio.CancelledError:
         pass
     db.close_pool()
+
 
 
 app = FastAPI(

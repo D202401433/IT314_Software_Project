@@ -9,6 +9,9 @@ concurrency:
   group: cd-${{ github.ref }}
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 env:
   DOCKER_BUILDKIT: 1
 
@@ -228,3 +231,26 @@ jobs:
           else
             echo "ℹ️ RENDER_DEPLOY_HOOK secret not set. Skipping Render trigger."
           fi
+
+      - name: Verify Backend Production Health
+        if: ${{ (needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.ai-workers == 'true' || github.event_name == 'workflow_dispatch') }}
+        env:
+          PROD_BACKEND_URL: ${{ secrets.PROD_BACKEND_URL }}
+        run: |
+          if [ -n "$PROD_BACKEND_URL" ]; then
+            echo "Waiting for production backend to complete deployment rollout..."
+            sleep 20
+            for i in $(seq 1 24); do
+              HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$PROD_BACKEND_URL/health" || echo "000")
+              if [ "$HTTP_STATUS" = "200" ]; then
+                echo "✅ Production backend healthcheck passed (HTTP 200)."
+                exit 0
+              fi
+              echo "Polling $PROD_BACKEND_URL/health - attempt $i/24 (got HTTP $HTTP_STATUS), retrying in 10s..."
+              sleep 10
+            done
+            echo "⚠️ Health check timed out or failed on $PROD_BACKEND_URL/health"
+          else
+            echo "ℹ️ PROD_BACKEND_URL secret not set. Skipping live health verification."
+          fi
+

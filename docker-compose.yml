@@ -18,6 +18,11 @@ services:
       - ./backend/db/migrations/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
       - ./backend/db/seeds/seed_data.sql:/docker-entrypoint-initdb.d/02_seed_data.sql
       - ./backend/db/migrations/02_dm_module.sql:/docker-entrypoint-initdb.d/03_dm_module.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-drch_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     restart: unless-stopped
 
   redis:
@@ -25,6 +30,11 @@ services:
     container_name: drch_redis
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
     restart: unless-stopped
 
   rabbitmq:
@@ -36,6 +46,11 @@ services:
     ports:
       - "5672:5672"
       - "15672:15672" # Admin UI
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
   # ------------------------------------------------------------------------------
@@ -56,7 +71,8 @@ services:
       - /app/node_modules
       - /app/.next
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
   backend:
     image: drch_backend:latest
@@ -68,13 +84,16 @@ services:
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@postgres-postgis:5432/${POSTGRES_DB:-drch_db}
       - REDIS_URL=redis://redis:6379/0
-      - JWT_SECRET=${JWT_SECRET}
+      - JWT_SECRET=${JWT_SECRET:-insecure_default_jwt_secret_at_least_32_chars_long}
     volumes:
       - ./backend:/app
     depends_on:
-      - postgres-postgis
-      - redis
-      - rabbitmq
+      postgres-postgis:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
 
   ai-workers:
     image: drch_ai_workers:latest
@@ -87,8 +106,10 @@ services:
     volumes:
       - ./ai-workers:/app
     depends_on:
-      - rabbitmq
-      - redis
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
 volumes:
   pgdata:
