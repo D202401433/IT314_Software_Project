@@ -1,27 +1,10 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
-from typing import List
+from typing import Annotated
 
-from fastapi import FastAPI, HTTPException, Header, Depends
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-
-from models import (
-    CreateReportRequest,
-    ReportResponse,
-    PublicIncidentResponse,
-    PublicAlertResponse,
-    ShelterResponse,
-)
-from database import (
-    init_database,
-    create_report,
-    get_reports_by_user,
-    get_report_by_id,
-    get_public_incidents,
-    get_public_alerts,
-    get_shelters,
-)
 
 from app import db
 from app.config import get_settings
@@ -29,6 +12,22 @@ from app.errors import install_error_handlers
 from app.routers import auth
 from app.routers.dm import router as dm_router
 from app.services.dispatch import escalate_overdue
+from database import (
+    create_report,
+    get_public_alerts,
+    get_public_incidents,
+    get_report_by_id,
+    get_reports_by_user,
+    get_shelters,
+    init_database,
+)
+from models import (
+    CreateReportRequest,
+    PublicAlertResponse,
+    PublicIncidentResponse,
+    ReportResponse,
+    ShelterResponse,
+)
 
 logger = logging.getLogger("drch.backend")
 logging.basicConfig(level=logging.INFO)
@@ -48,6 +47,9 @@ async def get_current_citizen(
     if not x_user_id or x_user_id in ("GUEST-000", "public", ""):
         raise HTTPException(status_code=401, detail="Authentication required. Please log in.")
     return {"user_id": x_user_id, "role": x_user_role}
+
+
+CurrentCitizen = Annotated[dict, Depends(get_current_citizen)]
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -152,7 +154,7 @@ def health_check():
 )
 async def submit_citizen_report(
     payload: CreateReportRequest,
-    citizen: dict = Depends(get_current_citizen),
+    citizen: CurrentCitizen,
 ):
     """
     Creates a new disaster report from an authenticated citizen.
@@ -178,18 +180,18 @@ async def submit_citizen_report(
         )
         logger.info(f"Citizen report {report['id']} created by user {citizen['user_id']}")
         return report
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.error(f"Failed to create report: {e}")
         raise HTTPException(status_code=500, detail="Failed to save report. Please try again.")
 
 
 @app.get(
     "/api/citizen/reports",
-    response_model=List[ReportResponse],
+    response_model=list[ReportResponse],
     summary="Get all reports for the authenticated citizen",
 )
 async def list_citizen_reports(
-    citizen: dict = Depends(get_current_citizen),
+    citizen: CurrentCitizen,
 ):
     """
     Returns all disaster reports submitted by the currently authenticated citizen.
@@ -199,7 +201,7 @@ async def list_citizen_reports(
     try:
         reports = get_reports_by_user(citizen["user_id"])
         return reports
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.error(f"Failed to fetch reports: {e}")
         raise HTTPException(status_code=500, detail="Failed to retrieve reports.")
 
@@ -211,7 +213,7 @@ async def list_citizen_reports(
 )
 async def get_citizen_report(
     report_id: str,
-    citizen: dict = Depends(get_current_citizen),
+    citizen: CurrentCitizen,
 ):
     """
     Returns a single disaster report by ID.
@@ -232,7 +234,7 @@ async def get_citizen_report(
 
 @app.get(
     "/api/public/incidents",
-    response_model=List[PublicIncidentResponse],
+    response_model=list[PublicIncidentResponse],
     summary="Get active verified incidents for public map",
 )
 async def list_public_incidents():
@@ -246,7 +248,7 @@ async def list_public_incidents():
 
 @app.get(
     "/api/public/alerts",
-    response_model=List[PublicAlertResponse],
+    response_model=list[PublicAlertResponse],
     summary="Get public safety alerts",
 )
 async def list_public_alerts():
@@ -259,7 +261,7 @@ async def list_public_alerts():
 
 @app.get(
     "/api/public/shelters",
-    response_model=List[ShelterResponse],
+    response_model=list[ShelterResponse],
     summary="Get shelter and hospital information",
 )
 async def list_shelters():

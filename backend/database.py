@@ -8,12 +8,11 @@ Designed to be compatible with the PostgreSQL schema (01_schema.sql)
 while remaining self-contained for demo/evaluation purposes.
 """
 
-import sqlite3
-import os
 import json
+import os
 import random
-from datetime import datetime, timezone
-from typing import Optional, List
+import sqlite3
+from datetime import UTC, datetime
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resq_citizen.db")
 
@@ -71,7 +70,7 @@ def create_report(user_id: str, data: dict) -> dict:
     conn = get_connection()
     try:
         report_id = generate_report_id()
-        submitted_at = datetime.now(timezone.utc).isoformat()
+        submitted_at = datetime.now(UTC).isoformat()
 
         conn.execute(
             """
@@ -116,7 +115,7 @@ def create_report(user_id: str, data: dict) -> dict:
         conn.close()
 
 
-def get_reports_by_user(user_id: str) -> List[dict]:
+def get_reports_by_user(user_id: str) -> list[dict]:
     """Get all reports submitted by a specific user, ordered newest first."""
     conn = get_connection()
     try:
@@ -137,7 +136,7 @@ def get_reports_by_user(user_id: str) -> List[dict]:
         conn.close()
 
 
-def get_report_by_id(report_id: str, user_id: str) -> Optional[dict]:
+def get_report_by_id(report_id: str, user_id: str) -> dict | None:
     """Get a single report by ID, enforcing ownership via user_id."""
     conn = get_connection()
     try:
@@ -312,7 +311,7 @@ SEED_SHELTERS = [
 ]
 
 
-def get_public_incidents() -> List[dict]:
+def get_public_incidents() -> list[dict]:
     """Return active, verified incidents approved for public visibility."""
     return [
         inc for inc in SEED_INCIDENTS
@@ -320,11 +319,11 @@ def get_public_incidents() -> List[dict]:
     ]
 
 
-def get_public_alerts() -> List[dict]:
+def get_public_alerts() -> list[dict]:
     """Return safety alerts visible to the public."""
     return list(SEED_ALERTS)
 
 
-def get_shelters() -> List[dict]:
+def get_shelters() -> list[dict]:
     """Return shelter and hospital information."""
     return [s for s in SEED_SHELTERS if s["status"] != "HAZARD_BLOCKED"]

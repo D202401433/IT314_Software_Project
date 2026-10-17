@@ -5,10 +5,10 @@ Validates all backend endpoints for the Citizen module:
 - Public data endpoints (incidents, alerts, shelters)
 - Citizen disaster report creation, listing, and retrieval
 """
-import pytest
 from fastapi.testclient import TestClient
-from main import app
+
 from database import init_database
+from main import app
 
 client = TestClient(app)
 
