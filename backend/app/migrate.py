@@ -2,6 +2,7 @@
 
 import logging
 from pathlib import Path
+
 from app import db
 
 logger = logging.getLogger("drch.migrate")
@@ -42,6 +43,13 @@ def apply_migrations() -> list[str]:
                     (version_name,),
                 )
                 applied.append(version_name)
+
+        # Ensure seed reference data (roles, baseline configs) is applied
+        seed_file = Path(__file__).resolve().parents[1] / "db" / "seeds" / "seed_data.sql"
+        if seed_file.exists() and "01_schema.sql" in applied:
+            logger.info("Applying baseline seed data from %s", seed_file.name)
+            with open(seed_file, "r", encoding="utf-8") as f:
+                conn.execute(f.read())
 
     if applied:
         logger.info("Successfully applied %d migration(s): %s", len(applied), ", ".join(applied))
