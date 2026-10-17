@@ -31,11 +31,9 @@ Following this standard workflow ensures that your changes stay up-to-date with 
 
 ## Step 1: Fork the Repository
 
-1. Navigate to the central project repository on GitHub:
-   👉 **[https://github.com/Siddhcreator-1706/IT314_Software_Project](https://github.com/Siddhcreator-1706/IT314_Software_Project)**
-2. In the top-right corner of the page, click the **Fork** button.
-3. Select your GitHub personal account or designated organization as the destination.
-4. Ensure **"Copy the `main` branch only"** is **unchecked** if you need other branches, or checked if you only need the latest stable `main`. Click **Create fork**.
+1. In the top-right corner of the page, click the **Fork** button to fork the repository.
+2. Select your GitHub personal account or designated organization as the destination.
+3. Ensure **"Copy the `main` branch only"** is **unchecked** if you need other branches, or checked if you only need the latest stable `main`. Click **Create fork**.
 
 ---
 
