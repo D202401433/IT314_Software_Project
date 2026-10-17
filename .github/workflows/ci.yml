@@ -347,7 +347,6 @@ jobs:
 
       - name: Deploy Verified Preview to Vercel
         if: github.event_name == 'pull_request' && needs.detect-changes.outputs.frontend == 'true'
-        working-directory: ./frontend
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
