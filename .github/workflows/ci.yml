@@ -339,8 +339,15 @@ jobs:
           fi
           echo "CI check PASSED: all required validation and security jobs succeeded."
 
+      - name: Checkout repository for Vercel deployment
+        if: github.event_name == 'pull_request' && needs.detect-changes.outputs.frontend == 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Deploy Verified Preview to Vercel
         if: github.event_name == 'pull_request' && needs.detect-changes.outputs.frontend == 'true'
+
         uses: amondnet/vercel-action@v25
         with:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
