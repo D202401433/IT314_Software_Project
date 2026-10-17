@@ -1540,35 +1540,6 @@ function ResQGeoPortalInner() {
             <span>📊</span>
             <span>My workspace</span>
           </button>
-          {/* If NOT Authenticated: Guest Mode Controls */}
-          {!isAuthenticated ? (
-            <>
-              {/* Quick Role Switcher Pills for Instant Testing */}
-              <div className="hidden items-center gap-1.5 bg-slate-900/80 p-1 rounded-full border border-sky-800/50">
-                <span className="text-[10px] text-sky-300 font-bold px-2 uppercase tracking-wider">Preview View:</span>
-                <button
-                  onClick={() => switchRole("Public / Citizen")}
-                  className="text-xs bg-slate-800 hover:bg-sky-700 text-sky-200 hover:text-white px-2.5 py-0.5 rounded-full transition cursor-pointer flex items-center gap-1"
-                  title="Switch to Citizen / User view"
-                >
-                  <span>👤</span> Citizen
-                </button>
-                <button
-                  onClick={() => switchRole("Command Officer / Incident Commander")}
-                  className="text-xs bg-slate-800 hover:bg-blue-700 text-blue-200 hover:text-white px-2.5 py-0.5 rounded-full transition cursor-pointer flex items-center gap-1"
-                  title="Switch to Administrator view"
-                >
-                  <span>🛡️</span> Admin
-                </button>
-                <button
-                  onClick={() => switchRole("Medic / Ambulance Team")}
-                  className="text-xs bg-slate-800 hover:bg-amber-700 text-amber-200 hover:text-white px-2.5 py-0.5 rounded-full transition cursor-pointer flex items-center gap-1"
-                  title="Switch to Service Provider view"
-                >
-                  <span>🚑</span> Responder
-                </button>
-              </div>
-
           {/* If NOT Authenticated */}
           {!isAuthenticated ? (
             <button
