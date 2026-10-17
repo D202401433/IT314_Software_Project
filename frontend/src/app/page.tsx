@@ -16,6 +16,11 @@ import { AdminDashboardView } from "../components/role-views/AdminDashboardView"
 import { ServiceProviderDashboardView } from "../components/role-views/ServiceProviderDashboardView";
 import { LiveOperationsLayer } from "../components/dm/LiveOperationsLayer";
 import { IncidentRecord, PortalRoleCategory } from "../types/resq";
+import { LiveIncidentsView } from "../components/views/LiveIncidentsView";
+import { DispatchCenterView } from "../components/views/DispatchCenterView";
+import { RespondersView } from "../components/views/RespondersView";
+import { ResourcesView } from "../components/views/ResourcesView";
+import { AnalyticsView } from "../components/views/AnalyticsView";
 
 // Basemap layer configurations with maxNativeZoom to prevent labels disappearing at deep zoom
 const TILE_LAYERS = {
@@ -70,16 +75,27 @@ const TILE_LAYERS = {
   },
 };
 
+export type DashboardTab =
+  | "dashboard"
+  | "incidents"
+  | "dispatch"
+  | "responders"
+  | "resources"
+  | "analytics";
+
 function CommandDashboard({
+  activeTab,
+  setActiveTab,
   incidents,
   responders,
   dispatches,
   unreadAlertCount,
   onMap,
+  onMapWithIncident,
+  onMapWithTarget,
   onReport,
   onAlerts,
-  onWorkspace,
-  onAnalytics,
+  onSelectIncident,
   showCitizenReport,
   showRoleWorkspace,
   showAlertsDrawer,
@@ -93,15 +109,18 @@ function CommandDashboard({
   onCloseDispatch,
   onOpenDispatch,
 }: {
+  activeTab: DashboardTab;
+  setActiveTab: (tab: DashboardTab) => void;
   incidents: IncidentRecord[];
-  responders: unknown[];
-  dispatches: unknown[];
+  responders: any[];
+  dispatches: any[];
   unreadAlertCount: number;
   onMap: () => void;
+  onMapWithIncident: (incident?: IncidentRecord) => void;
+  onMapWithTarget: (target?: { lat: number; lon: number; title: string }) => void;
   onReport: () => void;
   onAlerts: () => void;
-  onWorkspace: () => void;
-  onAnalytics: () => void;
+  onSelectIncident: (incident: IncidentRecord) => void;
   showCitizenReport: boolean;
   showRoleWorkspace: boolean;
   showAlertsDrawer: boolean;
@@ -128,54 +147,390 @@ function CommandDashboard({
     <main className="h-screen overflow-y-auto bg-[#f4f7fa] text-[#13263d]">
       <div className="flex h-9 items-center justify-between bg-[#07569c] px-4 text-[11px] text-white sm:px-7">
         <span>Emergency Response &amp; Coordination Platform</span>
-        <span className="flex items-center gap-2 sm:gap-5"><span className="text-emerald-300">●</span> All systems operational <span className="hidden sm:inline">◎ English⌄</span></span>
+        <span className="flex items-center gap-2 sm:gap-5">
+          <span className="text-emerald-300">●</span> All systems operational <span className="hidden sm:inline">◎ English⌄</span>
+        </span>
       </div>
       <header className="flex h-20 items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-7">
         <div className="flex items-center gap-3">
-          <div className="grid h-12 w-12 place-items-center rounded-lg border border-sky-200 bg-sky-50 text-2xl text-[#07569c]" aria-hidden>🛡</div>
-          <div><h1 className="text-[27px] leading-none font-bold tracking-tight text-[#07569c]">ResQ <span className="font-light text-slate-700">AI</span></h1><p className="mt-1.5 text-[11px] text-slate-500">Integrated Emergency Management</p></div>
+          <div className="grid h-12 w-12 place-items-center rounded-lg border border-sky-200 bg-sky-50 text-2xl text-[#07569c]" aria-hidden>
+            🛡
+          </div>
+          <div>
+            <h1 className="text-[27px] leading-none font-bold tracking-tight text-[#07569c]">
+              ResQ <span className="font-light text-slate-700">AI</span>
+            </h1>
+            <p className="mt-1.5 text-[11px] text-slate-500">Integrated Emergency Management</p>
+          </div>
         </div>
-        <div className="text-right"><p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Regional command</p><p className="mt-1.5 text-sm font-semibold">National Operations Center</p></div>
+        <div className="text-right">
+          <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Regional command</p>
+          <p className="mt-1.5 text-sm font-semibold">National Operations Center</p>
+        </div>
       </header>
+
       <div className="flex min-h-[calc(100vh-116px)]">
-        <aside className="hidden w-60 shrink-0 border-r border-slate-200 bg-white px-3 py-5 lg:block">
+        {/* Left Sidebar */}
+        <aside className="hidden w-64 shrink-0 border-r border-slate-200 bg-white px-3 py-5 lg:block">
           <p className="mb-3 px-3 text-[11px] font-bold uppercase tracking-wider text-slate-500">Operations</p>
           <nav className="space-y-1 text-sm">
-            <button aria-current="page" className="w-full rounded-lg border-l-4 border-[#075cab] bg-[#e2f0ff] px-3 py-3 text-left font-semibold text-[#075cab]">▦ &nbsp; Dashboard</button>
-            <button onClick={onWorkspace} className="w-full rounded-lg px-3 py-3 text-left text-slate-600 transition hover:bg-slate-50">◉ &nbsp; Live incidents <span className="float-right rounded bg-slate-100 px-2 text-xs">{active}</span></button>
-            <button onClick={onMap} className="w-full rounded-lg px-3 py-3 text-left text-slate-600 transition hover:bg-slate-50">⌖ &nbsp; Incident map</button>
-            <button onClick={onWorkspace} className="w-full rounded-lg px-3 py-3 text-left text-slate-600 transition hover:bg-slate-50">➤ &nbsp; Dispatch center</button>
-            <button onClick={onAlerts} className="w-full rounded-lg px-3 py-3 text-left text-slate-600 transition hover:bg-slate-50">♧ &nbsp; Alerts {unreadAlertCount > 0 && <span className="float-right rounded bg-red-50 px-2 text-xs text-red-600">{unreadAlertCount}</span>}</button>
-            <button onClick={onWorkspace} className="w-full rounded-lg px-3 py-3 text-left text-slate-600 transition hover:bg-slate-50">♙ &nbsp; Responders</button>
+            <button
+              onClick={() => setActiveTab("dashboard")}
+              className={`w-full rounded-lg px-3 py-3 text-left transition cursor-pointer flex items-center justify-between ${
+                activeTab === "dashboard"
+                  ? "border-l-4 border-[#075cab] bg-[#e2f0ff] font-semibold text-[#075cab]"
+                  : "text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              <span>▦ &nbsp; Dashboard</span>
+            </button>
+            <button
+              onClick={() => setActiveTab("incidents")}
+              className={`w-full rounded-lg px-3 py-3 text-left transition cursor-pointer flex items-center justify-between ${
+                activeTab === "incidents"
+                  ? "border-l-4 border-[#075cab] bg-[#e2f0ff] font-semibold text-[#075cab]"
+                  : "text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              <span>◉ &nbsp; Live incidents</span>
+              <span className={`rounded px-2 text-xs font-bold ${activeTab === "incidents" ? "bg-[#075cab] text-white" : "bg-slate-100 text-slate-600"}`}>
+                {active}
+              </span>
+            </button>
+            <button
+              onClick={onMap}
+              className="w-full rounded-lg px-3 py-3 text-left text-slate-600 transition hover:bg-slate-50 cursor-pointer"
+            >
+              ⌖ &nbsp; Incident map
+            </button>
+            <button
+              onClick={() => setActiveTab("dispatch")}
+              className={`w-full rounded-lg px-3 py-3 text-left transition cursor-pointer flex items-center justify-between ${
+                activeTab === "dispatch"
+                  ? "border-l-4 border-[#075cab] bg-[#e2f0ff] font-semibold text-[#075cab]"
+                  : "text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              <span>➤ &nbsp; Dispatch center</span>
+            </button>
+            <button
+              onClick={onAlerts}
+              className="w-full rounded-lg px-3 py-3 text-left text-slate-600 transition hover:bg-slate-50 cursor-pointer flex items-center justify-between"
+            >
+              <span>♧ &nbsp; Alerts</span>
+              {unreadAlertCount > 0 && (
+                <span className="rounded bg-red-50 px-2 text-xs font-bold text-red-600">
+                  {unreadAlertCount}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => setActiveTab("responders")}
+              className={`w-full rounded-lg px-3 py-3 text-left transition cursor-pointer flex items-center justify-between ${
+                activeTab === "responders"
+                  ? "border-l-4 border-[#075cab] bg-[#e2f0ff] font-semibold text-[#075cab]"
+                  : "text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              <span>♙ &nbsp; Responders</span>
+            </button>
             <div className="my-3 border-t border-slate-200" />
-            <button onClick={onWorkspace} className="w-full rounded-lg px-3 py-3 text-left text-slate-600 transition hover:bg-slate-50">♙ &nbsp; Resources</button>
-            <button onClick={onAnalytics} className="w-full rounded-lg px-3 py-3 text-left text-slate-600 transition hover:bg-slate-50">▥ &nbsp; Analytics &amp; reports</button>
+            <button
+              onClick={() => setActiveTab("resources")}
+              className={`w-full rounded-lg px-3 py-3 text-left transition cursor-pointer flex items-center justify-between ${
+                activeTab === "resources"
+                  ? "border-l-4 border-[#075cab] bg-[#e2f0ff] font-semibold text-[#075cab]"
+                  : "text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              <span>♙ &nbsp; Resources</span>
+            </button>
+            <button
+              onClick={() => setActiveTab("analytics")}
+              className={`w-full rounded-lg px-3 py-3 text-left transition cursor-pointer flex items-center justify-between ${
+                activeTab === "analytics"
+                  ? "border-l-4 border-[#075cab] bg-[#e2f0ff] font-semibold text-[#075cab]"
+                  : "text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              <span>▥ &nbsp; Analytics &amp; reports</span>
+            </button>
           </nav>
         </aside>
+
+        {/* Main Content Area */}
         <section className="min-w-0 flex-1 p-4 sm:p-6 lg:p-7">
+          {/* Mobile Top Navigation */}
           <nav aria-label="Dashboard navigation" className="mb-4 flex gap-1 overflow-x-auto lg:hidden">
-            <span aria-current="page" className="shrink-0 rounded-lg bg-[#e2f0ff] px-3 py-2 text-xs font-semibold text-[#075cab]">▦ Dashboard</span>
-            <button onClick={onWorkspace} className="shrink-0 rounded-lg px-3 py-2 text-xs text-slate-600 hover:bg-white">◉ Live incidents</button>
-            <button onClick={onMap} className="shrink-0 rounded-lg px-3 py-2 text-xs text-slate-600 hover:bg-white">⌖ Incident map</button>
-            <button onClick={onAlerts} className="shrink-0 rounded-lg px-3 py-2 text-xs text-slate-600 hover:bg-white">♧ Alerts</button>
+            <button
+              onClick={() => setActiveTab("dashboard")}
+              className={`shrink-0 rounded-lg px-3 py-2 text-xs font-semibold cursor-pointer ${
+                activeTab === "dashboard" ? "bg-[#e2f0ff] text-[#075cab]" : "text-slate-600 hover:bg-white"
+              }`}
+            >
+              ▦ Dashboard
+            </button>
+            <button
+              onClick={() => setActiveTab("incidents")}
+              className={`shrink-0 rounded-lg px-3 py-2 text-xs font-semibold cursor-pointer ${
+                activeTab === "incidents" ? "bg-[#e2f0ff] text-[#075cab]" : "text-slate-600 hover:bg-white"
+              }`}
+            >
+              ◉ Live incidents
+            </button>
+            <button
+              onClick={onMap}
+              className="shrink-0 rounded-lg px-3 py-2 text-xs text-slate-600 hover:bg-white cursor-pointer"
+            >
+              ⌖ Incident map
+            </button>
+            <button
+              onClick={() => setActiveTab("dispatch")}
+              className={`shrink-0 rounded-lg px-3 py-2 text-xs font-semibold cursor-pointer ${
+                activeTab === "dispatch" ? "bg-[#e2f0ff] text-[#075cab]" : "text-slate-600 hover:bg-white"
+              }`}
+            >
+              ➤ Dispatch
+            </button>
+            <button
+              onClick={onAlerts}
+              className="shrink-0 rounded-lg px-3 py-2 text-xs text-slate-600 hover:bg-white cursor-pointer"
+            >
+              ♧ Alerts
+            </button>
+            <button
+              onClick={() => setActiveTab("responders")}
+              className={`shrink-0 rounded-lg px-3 py-2 text-xs font-semibold cursor-pointer ${
+                activeTab === "responders" ? "bg-[#e2f0ff] text-[#075cab]" : "text-slate-600 hover:bg-white"
+              }`}
+            >
+              ♙ Responders
+            </button>
+            <button
+              onClick={() => setActiveTab("resources")}
+              className={`shrink-0 rounded-lg px-3 py-2 text-xs font-semibold cursor-pointer ${
+                activeTab === "resources" ? "bg-[#e2f0ff] text-[#075cab]" : "text-slate-600 hover:bg-white"
+              }`}
+            >
+              ♙ Resources
+            </button>
+            <button
+              onClick={() => setActiveTab("analytics")}
+              className={`shrink-0 rounded-lg px-3 py-2 text-xs font-semibold cursor-pointer ${
+                activeTab === "analytics" ? "bg-[#e2f0ff] text-[#075cab]" : "text-slate-600 hover:bg-white"
+              }`}
+            >
+              ▥ Analytics
+            </button>
           </nav>
-          <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Situational awareness</p><h2 className="mt-1.5 text-2xl font-bold sm:text-3xl">Command Dashboard</h2><p className="mt-1.5 text-sm text-slate-500">Real-time incident monitoring and coordinated emergency response.</p></div><div className="flex gap-2"><button onClick={onAnalytics} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold shadow-sm transition hover:bg-slate-50">Analytics</button><button onClick={onReport} className="rounded-lg bg-[#075cab] px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#064a85]">+ Situation report</button></div></div>
-          {critical > 0 && <button onClick={onWorkspace} className="mb-6 flex w-full items-center justify-between rounded-lg border border-red-200 border-l-4 border-l-red-500 bg-red-50 px-5 py-4 text-left text-sm text-red-700"><span><b>Priority attention required</b> &nbsp; {critical} critical incident{critical === 1 ? "" : "s"} active.</span><span>Review →</span></button>}
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{cards.map(([label, value, detail, tone, color]) => <article key={label} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5"><div className="flex items-start justify-between"><p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{label}</p><span className="rounded-lg px-2 py-1" style={{ backgroundColor: tone, color }}>●</span></div><p className="mt-4 text-3xl font-bold sm:text-4xl">{value}</p><p className="mt-2 text-xs text-slate-500">{detail}</p></article>)}</div>
-          <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(300px,0.75fr)]"><article className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"><div className="flex items-center justify-between border-b border-slate-200 px-4 py-3.5 sm:px-5"><div><h3 className="font-semibold">⌖ &nbsp; Live incident map</h3><p className="mt-0.5 text-xs text-slate-500">Operational overview · India</p></div><button onClick={onMap} className="text-sm font-semibold text-[#075cab] hover:underline">Open map →</button></div><button onClick={onMap} aria-label="Open interactive incident map" className="relative grid h-56 w-full place-items-center overflow-hidden bg-[#eaf2f3] text-center sm:h-64">
-            <svg aria-hidden="true" viewBox="0 0 900 360" preserveAspectRatio="xMidYMid slice" className="absolute inset-0 h-full w-full">
-              <rect width="900" height="360" fill="#eaf2f3" />
-              <path d="M0 55 150 20 270 65 390 20 520 70 650 25 900 60M0 160 130 115 260 175 390 120 510 170 660 115 900 165M0 285 150 240 280 300 420 245 570 310 720 245 900 300" fill="none" stroke="#d3e4df" strokeWidth="34" />
-              <path d="M70-20 160 380M280-20 355 380M520-20 440 380M700-20 620 380M0 95 900 255M0 230 900 100" fill="none" stroke="#fff" strokeWidth="11" />
-              <path d="M70-20 160 380M280-20 355 380M520-20 440 380M700-20 620 380M0 95 900 255M0 230 900 100" fill="none" stroke="#cbd5d7" strokeWidth="2" />
-              <path d="M0 340Q160 250 300 330T600 320T900 345" fill="none" stroke="#89c7e0" strokeWidth="20" />
-            </svg>
-            {incidents.slice(0, 4).map((incident, index) => <span key={incident.id} className="absolute z-10 grid size-8 place-items-center rounded-full border-2 border-white bg-[#e9842a] text-xs font-bold text-white shadow-md" style={{ left: `${24 + index * 17}%`, top: `${25 + (index % 2) * 35}%` }} aria-hidden>!</span>)}
-            <span className="absolute bottom-3 left-3 z-10 rounded-md border border-slate-200 bg-white/95 px-3 py-1.5 text-[11px] font-semibold text-slate-700 shadow"><span className="mr-2 text-emerald-600">●</span>India · Operational area</span>
-            <span className="relative z-10 rounded-full border border-sky-200 bg-white/95 px-4 py-2 text-sm font-semibold text-[#07569c] shadow">Open interactive map</span>
-          </button></article><article className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"><div className="flex items-center justify-between border-b border-sky-200 bg-[#e5f2ff] px-4 py-3.5 sm:px-5"><h3 className="font-semibold text-[#07569c]">✦ AI incident triage</h3><span className="rounded border border-sky-200 bg-white/70 px-2 py-1 text-[10px] font-bold text-[#07569c]">AI ASSIST</span></div><div className="p-5"><p className="text-xs text-slate-500">{incidents[0]?.id || "LATEST ASSESSMENT"}</p><h4 className="mt-3 text-lg font-bold">{incidents[0]?.title || "No active incident selected"}</h4><p className="mt-2 text-sm leading-6 text-slate-600">AI-assisted prioritization is available to support the command team.</p><div className="mt-4 flex items-center gap-2 text-xs"><span className="rounded bg-red-50 px-2 py-1 font-semibold text-red-700">{incidents[0]?.severity || "Monitoring"}</span><span className="text-emerald-700">✓ Verified report</span></div><button onClick={onWorkspace} className="mt-5 text-sm font-semibold text-[#075cab] hover:underline">Open workspace →</button></div></article></div>
+
+          {/* TAB 1: OVERVIEW DASHBOARD */}
+          {activeTab === "dashboard" && (
+            <div>
+              <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                    Situational awareness
+                  </p>
+                  <h2 className="mt-1.5 text-2xl font-bold sm:text-3xl">Command Dashboard</h2>
+                  <p className="mt-1.5 text-sm text-slate-500">
+                    Real-time incident monitoring and coordinated emergency response.
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setActiveTab("analytics")}
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold shadow-xs transition hover:bg-slate-50 cursor-pointer"
+                  >
+                    Analytics
+                  </button>
+                  <button
+                    onClick={onReport}
+                    className="rounded-lg bg-[#075cab] px-3 py-2 text-sm font-semibold text-white shadow-xs transition hover:bg-[#064a85] cursor-pointer"
+                  >
+                    + Situation report
+                  </button>
+                </div>
+              </div>
+
+              {critical > 0 && (
+                <button
+                  onClick={() => setActiveTab("incidents")}
+                  className="mb-6 flex w-full items-center justify-between rounded-lg border border-red-200 border-l-4 border-l-red-500 bg-red-50 px-5 py-4 text-left text-sm text-red-700 cursor-pointer hover:bg-red-100/50 transition"
+                >
+                  <span>
+                    <b>Priority attention required</b> &nbsp; {critical} critical incident
+                    {critical === 1 ? "" : "s"} active.
+                  </span>
+                  <span>Review →</span>
+                </button>
+              )}
+
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                {cards.map(([label, value, detail, tone, color]) => (
+                  <article
+                    key={label}
+                    onClick={() => {
+                      if (label === "Active incidents") setActiveTab("incidents");
+                      if (label === "Units deployed") setActiveTab("responders");
+                      if (label === "Alerts") onAlerts();
+                    }}
+                    className="rounded-lg border border-slate-200 bg-white p-4 shadow-xs sm:p-5 transition hover:shadow-sm cursor-pointer"
+                  >
+                    <div className="flex items-start justify-between">
+                      <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{label}</p>
+                      <span className="rounded-lg px-2 py-1" style={{ backgroundColor: tone, color }}>
+                        ●
+                      </span>
+                    </div>
+                    <p className="mt-4 text-3xl font-bold sm:text-4xl">{value}</p>
+                    <p className="mt-2 text-xs text-slate-500">{detail}</p>
+                  </article>
+                ))}
+              </div>
+
+              <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(300px,0.75fr)]">
+                <article className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xs">
+                  <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3.5 sm:px-5">
+                    <div>
+                      <h3 className="font-semibold">⌖ &nbsp; Live incident map</h3>
+                      <p className="mt-0.5 text-xs text-slate-500">Operational overview · India</p>
+                    </div>
+                    <button
+                      onClick={onMap}
+                      className="text-sm font-semibold text-[#075cab] hover:underline cursor-pointer"
+                    >
+                      Open full map →
+                    </button>
+                  </div>
+                  <button
+                    onClick={onMap}
+                    aria-label="Open interactive incident map"
+                    className="relative grid h-56 w-full place-items-center overflow-hidden bg-[#eaf2f3] text-center sm:h-64 cursor-pointer"
+                  >
+                    <svg
+                      aria-hidden="true"
+                      viewBox="0 0 900 360"
+                      preserveAspectRatio="xMidYMid slice"
+                      className="absolute inset-0 h-full w-full"
+                    >
+                      <rect width="900" height="360" fill="#eaf2f3" />
+                      <path
+                        d="M0 55 150 20 270 65 390 20 520 70 650 25 900 60M0 160 130 115 260 175 390 120 510 170 660 115 900 165M0 285 150 240 280 300 420 245 570 310 720 245 900 300"
+                        fill="none"
+                        stroke="#d3e4df"
+                        strokeWidth="34"
+                      />
+                      <path
+                        d="M70-20 160 380M280-20 355 380M520-20 440 380M700-20 620 380M0 95 900 255M0 230 900 100"
+                        fill="none"
+                        stroke="#fff"
+                        strokeWidth="11"
+                      />
+                      <path
+                        d="M70-20 160 380M280-20 355 380M520-20 440 380M700-20 620 380M0 95 900 255M0 230 900 100"
+                        fill="none"
+                        stroke="#cbd5d7"
+                        strokeWidth="2"
+                      />
+                      <path
+                        d="M0 340Q160 250 300 330T600 320T900 345"
+                        fill="none"
+                        stroke="#89c7e0"
+                        strokeWidth="20"
+                      />
+                    </svg>
+                    {incidents.slice(0, 4).map((incident, index) => (
+                      <span
+                        key={incident.id}
+                        className="absolute z-10 grid size-8 place-items-center rounded-full border-2 border-white bg-[#e9842a] text-xs font-bold text-white shadow-md"
+                        style={{
+                          left: `${24 + index * 17}%`,
+                          top: `${25 + (index % 2) * 35}%`,
+                        }}
+                        aria-hidden
+                      >
+                        !
+                      </span>
+                    ))}
+                    <span className="absolute bottom-3 left-3 z-10 rounded-md border border-slate-200 bg-white/95 px-3 py-1.5 text-[11px] font-semibold text-slate-700 shadow-xs">
+                      <span className="mr-2 text-emerald-600">●</span>India · Operational area
+                    </span>
+                    <span className="relative z-10 rounded-full border border-sky-200 bg-white/95 px-4 py-2 text-sm font-semibold text-[#07569c] shadow-xs">
+                      Open interactive map
+                    </span>
+                  </button>
+                </article>
+
+                <article className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xs flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between border-b border-sky-200 bg-[#e5f2ff] px-4 py-3.5 sm:px-5">
+                      <h3 className="font-semibold text-[#07569c]">✦ AI incident triage</h3>
+                      <span className="rounded border border-sky-200 bg-white/70 px-2 py-1 text-[10px] font-bold text-[#07569c]">
+                        AI ASSIST
+                      </span>
+                    </div>
+                    <div className="p-5">
+                      <p className="text-xs text-slate-500">{incidents[0]?.id || "LATEST ASSESSMENT"}</p>
+                      <h4 className="mt-3 text-lg font-bold">{incidents[0]?.title || "No active incident selected"}</h4>
+                      <p className="mt-2 text-sm leading-6 text-slate-600">
+                        AI-assisted prioritization is available to support the command team.
+                      </p>
+                      <div className="mt-4 flex items-center gap-2 text-xs">
+                        <span className="rounded bg-red-50 px-2 py-1 font-semibold text-red-700">
+                          {incidents[0]?.severity || "Monitoring"}
+                        </span>
+                        <span className="text-emerald-700 font-semibold">✓ Verified report</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="p-5 pt-0">
+                    <button
+                      onClick={() => setActiveTab("incidents")}
+                      className="text-sm font-semibold text-[#075cab] hover:underline cursor-pointer"
+                    >
+                      View in live incidents →
+                    </button>
+                  </div>
+                </article>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: LIVE INCIDENTS */}
+          {activeTab === "incidents" && (
+            <LiveIncidentsView
+              onOpenMap={onMapWithIncident}
+              onOpenDispatch={onOpenDispatch}
+              onOpenReport={onReport}
+              onSelectIncident={onSelectIncident}
+            />
+          )}
+
+          {/* TAB 3: DISPATCH CENTER */}
+          {activeTab === "dispatch" && (
+            <DispatchCenterView
+              onOpenMap={onMapWithIncident}
+              onOpenDispatchModal={(inc) => {
+                if (inc) onOpenDispatch(inc);
+                else if (incidents.length > 0) onOpenDispatch(incidents[0]);
+              }}
+            />
+          )}
+
+          {/* TAB 4: RESPONDERS */}
+          {activeTab === "responders" && (
+            <RespondersView onOpenMap={onMapWithTarget} />
+          )}
+
+          {/* TAB 5: RESOURCES */}
+          {activeTab === "resources" && <ResourcesView />}
+
+          {/* TAB 6: ANALYTICS */}
+          {activeTab === "analytics" && <AnalyticsView />}
         </section>
       </div>
+
       <CitizenReportModal isOpen={showCitizenReport} onClose={onCloseReport} />
       <RoleWorkspaceModal
         isOpen={showRoleWorkspace}
@@ -193,6 +548,7 @@ function CommandDashboard({
     </main>
   );
 }
+
 
 // Permanent 100% watermark-free street & road labels overlay (Esri Reference Labels)
 const STREET_LABELS_OVERLAY = "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}";
@@ -247,7 +603,8 @@ function ResQGeoPortalInner() {
   const [selectedLang, setSelectedLang] = useState("English");
 
   // Splash screen & Dashboard panel
-  const [showSplash, setShowSplash] = useState(true);
+  const [activeTab, setActiveTab] = useState<DashboardTab>("dashboard");
+  const [showSplash, setShowSplash] = useState(false);
   const [splashFading, setSplashFading] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
   const [showMapView, setShowMapView] = useState(false);
@@ -895,39 +1252,81 @@ function ResQGeoPortalInner() {
     );
   };
 
+  const handleOpenMap = () => {
+    setShowSplash(false);
+    setMapReady(false);
+    setShowMapView(true);
+    setTimeout(() => {
+      mapRef.current?.invalidateSize();
+    }, 200);
+  };
+
+  const handleOpenMapWithIncident = (inc?: IncidentRecord) => {
+    if (inc) {
+      setMapFocusTarget({ lat: inc.lat, lon: inc.lon, zoom: 15, title: inc.title });
+      selectIncident(inc);
+    }
+    setShowSplash(false);
+    setMapReady(false);
+    setShowMapView(true);
+    setTimeout(() => {
+      mapRef.current?.invalidateSize();
+      if (inc && mapRef.current) {
+        mapRef.current.flyTo([inc.lat, inc.lon], 15, { duration: 1.5 });
+      }
+    }, 200);
+  };
+
+  const handleOpenMapWithTarget = (target?: { lat: number; lon: number; title: string }) => {
+    if (target) {
+      setMapFocusTarget({ lat: target.lat, lon: target.lon, zoom: 15, title: target.title });
+    }
+    setShowSplash(false);
+    setMapReady(false);
+    setShowMapView(true);
+    setTimeout(() => {
+      mapRef.current?.invalidateSize();
+      if (target && mapRef.current) {
+        mapRef.current.flyTo([target.lat, target.lon], 15, { duration: 1.5 });
+      }
+    }, 200);
+  };
+
   if (!showMapView) {
-    return <CommandDashboard
-      incidents={incidents}
-      responders={responders}
-      dispatches={dispatches}
-      unreadAlertCount={unreadAlertCount}
-      onMap={() => {
-        setMapReady(false);
-        setShowMapView(true);
-      }}
-      onReport={() => setShowCitizenReport(true)}
-      onAlerts={() => setShowAlertsDrawer(true)}
-      onWorkspace={() => setShowRoleWorkspace(true)}
-      onAnalytics={() => setShowAnalytics(true)}
-      showCitizenReport={showCitizenReport}
-      showRoleWorkspace={showRoleWorkspace}
-      showAlertsDrawer={showAlertsDrawer}
-      showAnalytics={showAnalytics}
-      showDispatchModal={showDispatchModal}
-      dispatchIncident={dispatchIncident}
-      onCloseReport={() => setShowCitizenReport(false)}
-      onCloseWorkspace={() => setShowRoleWorkspace(false)}
-      onCloseAlerts={() => setShowAlertsDrawer(false)}
-      onCloseAnalytics={() => setShowAnalytics(false)}
-      onCloseDispatch={() => {
-        setShowDispatchModal(false);
-        setDispatchIncident(null);
-      }}
-      onOpenDispatch={(incident) => {
-        setDispatchIncident(incident);
-        setShowDispatchModal(true);
-      }}
-    />;
+    return (
+      <CommandDashboard
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        incidents={incidents}
+        responders={responders}
+        dispatches={dispatches}
+        unreadAlertCount={unreadAlertCount}
+        onMap={handleOpenMap}
+        onMapWithIncident={handleOpenMapWithIncident}
+        onMapWithTarget={handleOpenMapWithTarget}
+        onReport={() => setShowCitizenReport(true)}
+        onAlerts={() => setShowAlertsDrawer(true)}
+        onSelectIncident={(incident) => selectIncident(incident)}
+        showCitizenReport={showCitizenReport}
+        showRoleWorkspace={showRoleWorkspace}
+        showAlertsDrawer={showAlertsDrawer}
+        showAnalytics={showAnalytics}
+        showDispatchModal={showDispatchModal}
+        dispatchIncident={dispatchIncident}
+        onCloseReport={() => setShowCitizenReport(false)}
+        onCloseWorkspace={() => setShowRoleWorkspace(false)}
+        onCloseAlerts={() => setShowAlertsDrawer(false)}
+        onCloseAnalytics={() => setShowAnalytics(false)}
+        onCloseDispatch={() => {
+          setShowDispatchModal(false);
+          setDispatchIncident(null);
+        }}
+        onOpenDispatch={(incident) => {
+          setDispatchIncident(incident);
+          setShowDispatchModal(true);
+        }}
+      />
+    );
   }
 
   return (
@@ -936,12 +1335,13 @@ function ResQGeoPortalInner() {
       {/* ============ SPLASH SCREEN ============ */}
       {showSplash && (
         <div
-          className="fixed inset-0 z-[9999] flex flex-col items-center justify-center"
+          className="fixed inset-0 z-[9999] flex flex-col items-center justify-center pointer-events-none"
           style={{
             background: "linear-gradient(135deg, #020d1a 0%, #0c2340 40%, #0c4a75 70%, #0369a1 100%)",
             transition: splashFading ? "opacity 0.8s ease-out, transform 0.8s ease-out" : "none",
             opacity: splashFading ? 0 : 1,
             transform: splashFading ? "scale(1.04)" : "scale(1)",
+            pointerEvents: "none",
           }}
           onTransitionEnd={() => {
             if (splashFading) setShowSplash(false);
@@ -1072,13 +1472,13 @@ function ResQGeoPortalInner() {
           `}</style>
         </div>
       )}
-      {/* ============ HEADER (ResQ Bhuvan-Style) ============ */}
-      <header className="fixed top-3 left-3 right-3 h-12 z-[1000] rounded-2xl bg-slate-950/90 backdrop-blur-xl flex items-center justify-between px-3 text-white shadow-2xl border border-white/10">
+      {/* ============ HEADER (Clean Whitish Unified Navbar) ============ */}
+      <header className="fixed top-3 left-3 right-3 h-12 z-[1000] rounded-2xl bg-white/95 backdrop-blur-md flex items-center justify-between px-3.5 text-slate-800 shadow-md border border-slate-200/90">
         <div className="flex items-center gap-2.5">
           <button
             type="button"
             onClick={() => mapRef.current?.flyTo([23.5, 80.5], 5, { duration: 3, easeLinearity: 0.22 })}
-            className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-white text-lg shadow transition-transform hover:scale-105"
+            className="flex h-8 w-8 items-center justify-center rounded-xl border border-sky-300 text-base shadow-sm transition-transform hover:scale-105 cursor-pointer"
             style={{
               background: "radial-gradient(circle at 35% 35%, #38bdf8, #0369a1 70%)",
             }}
@@ -1090,254 +1490,192 @@ function ResQGeoPortalInner() {
 
           <div>
             <div className="flex items-baseline gap-1.5 leading-tight">
-              <span className="text-[18px] font-extrabold tracking-tight text-white">ResQ</span>
-              <span className="text-[12px] font-medium tracking-wide text-sky-300">Operations</span>
+              <span className="text-[17px] font-extrabold tracking-tight text-[#07569c]">ResQ</span>
+              <span className="text-[11px] font-semibold tracking-wide text-slate-500">Operations</span>
             </div>
           </div>
         </div>
 
-        <nav className="hidden">
+        <nav className="flex items-center gap-2">
           <button
             onClick={() => {
               setShowMapView(false);
               setShowDashboard(false);
             }}
-            className="hidden md:flex items-center gap-1.5 rounded-full border border-sky-700/60 bg-slate-900/60 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:border-sky-500/70 hover:text-white"
+            className="flex items-center gap-1.5 rounded-lg border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-semibold text-[#07569c] transition hover:bg-sky-100 cursor-pointer pointer-events-auto shadow-xs"
             title="Return to the command dashboard"
           >
             <span aria-hidden>▦</span>
-            <span>Dashboard</span>
+            <span>‹ Back to Dashboard</span>
           </button>
-          {/* Role-specific dashboard panel */}
-          <button
-            onClick={() => setShowDashboard((prev) => !prev)}
-            className={`hidden md:flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border transition cursor-pointer ${
-              showDashboard
-                ? "bg-sky-500/30 border-sky-400/60 text-sky-200"
-                : "bg-slate-900/60 border-slate-700/60 text-slate-300 hover:text-white hover:border-sky-600/50"
-            }`}
-            title="Toggle role-specific dashboard panel"
-          >
-            <span>📊</span>
-            <span>My workspace</span>
-          </button>
-          {/* If NOT Authenticated: Guest Mode Controls */}
-          {!isAuthenticated ? (
-            <>
-              {/* Quick Role Switcher Pills for Instant Testing */}
-              <div className="hidden items-center gap-1.5 bg-slate-900/80 p-1 rounded-full border border-sky-800/50">
-                <span className="text-[10px] text-sky-300 font-bold px-2 uppercase tracking-wider">Preview View:</span>
-                <button
-                  onClick={() => switchRole("Public / Citizen")}
-                  className="text-xs bg-slate-800 hover:bg-sky-700 text-sky-200 hover:text-white px-2.5 py-0.5 rounded-full transition cursor-pointer flex items-center gap-1"
-                  title="Switch to Citizen / User view"
-                >
-                  <span>👤</span> Citizen
-                </button>
-                <button
-                  onClick={() => switchRole("Command Officer / Incident Commander")}
-                  className="text-xs bg-slate-800 hover:bg-blue-700 text-blue-200 hover:text-white px-2.5 py-0.5 rounded-full transition cursor-pointer flex items-center gap-1"
-                  title="Switch to Administrator view"
-                >
-                  <span>🛡️</span> Admin
-                </button>
-                <button
-                  onClick={() => switchRole("Medic / Ambulance Team")}
-                  className="text-xs bg-slate-800 hover:bg-amber-700 text-amber-200 hover:text-white px-2.5 py-0.5 rounded-full transition cursor-pointer flex items-center gap-1"
-                  title="Switch to Service Provider view"
-                >
-                  <span>🚑</span> Responder
-                </button>
-              </div>
 
-              {/* Login / Register Button */}
-              <button
-                onClick={() => {
-                  setAuthModalMode("login");
-                  setShowAuthModal(true);
-                }}
-                className="bg-sky-500 hover:bg-sky-400 text-white text-xs font-bold px-3 py-1.5 rounded-full cursor-pointer transition shadow-md flex items-center gap-1.5"
-                title="Sign In or Register"
-              >
-                <span>🔐</span>
-                <span>Sign in</span>
-              </button>
-            </>
+          {/* If NOT Authenticated */}
+          {!isAuthenticated ? (
+            <button
+              onClick={() => {
+                setAuthModalMode("login");
+                setShowAuthModal(true);
+              }}
+              className="bg-[#07569c] hover:bg-[#064782] text-white text-xs font-semibold px-3 py-1.5 rounded-lg cursor-pointer transition shadow-xs flex items-center gap-1.5"
+              title="Sign In or Register"
+            >
+              <span>🔐</span>
+              <span>Sign in</span>
+            </button>
           ) : (
-            /* If Authenticated: Tailored Role Badges & Actions */
-            <>
-              {/* Active Role Workspace Button */}
+            /* Unified Role Display & Switcher Dropdown (Merged into 1 button) */
+            <div className="relative">
               <button
-                onClick={() => setShowRoleWorkspace(true)}
-                className={`bg-slate-900/90 hover:bg-slate-900 border px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 shadow-sm transition ${
-                  roleCategory === "user"
-                    ? "border-sky-500/70 text-sky-200"
-                    : roleCategory === "admin"
-                    ? "border-blue-500/70 text-blue-200"
-                    : "border-amber-500/70 text-amber-200"
-                }`}
-                title="Open Operational Role Workspace"
+                onClick={() => setShowRoleMenu((prev) => !prev)}
+                className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 hover:border-slate-300 transition shadow-xs cursor-pointer"
+                title="Click to switch role or view workspace"
               >
                 <span
                   className={`w-2 h-2 rounded-full ${
                     roleCategory === "user"
-                      ? "bg-sky-400"
+                      ? "bg-sky-500"
                       : roleCategory === "admin"
-                      ? "bg-blue-400 animate-pulse"
-                      : "bg-amber-400 animate-pulse"
+                      ? "bg-blue-600 animate-pulse"
+                      : "bg-amber-500 animate-pulse"
                   }`}
                 />
-                <span className="font-semibold text-white">
+                <span className="font-semibold text-slate-800">
                   {roleCategory === "user"
-                    ? "Citizen Portal"
+                    ? "Citizen"
                     : roleCategory === "admin"
                     ? "Command HQ"
-                    : "Field Console"}
+                    : "Field Responder"}
                 </span>
-                <span className="text-[10px] opacity-80">
+                <span className="text-[11px] text-slate-500 font-normal hidden md:inline">
                   ({currentUser.name.split(" ")[0]}
                   {currentUser.assignedUnitCallsign ? ` • ${currentUser.assignedUnitCallsign}` : ""})
                 </span>
+                <span className="text-[9px] text-slate-400 ml-0.5">▼</span>
               </button>
 
-              {/* Administrator Quick Controls */}
-              {roleCategory === "admin" && (
-                <>
+              {showRoleMenu && (
+                <div className="absolute right-0 mt-2 w-64 bg-white border border-slate-200 rounded-xl shadow-xl p-2 z-[1100] text-xs space-y-1 text-slate-700">
+                  <div className="px-2.5 py-1 text-[10px] text-slate-400 font-bold uppercase tracking-wider border-b border-slate-100 flex items-center justify-between">
+                    <span>Select Operational Role</span>
+                    <span className="text-[9px] text-sky-600 font-medium">Active: {roleCategory}</span>
+                  </div>
+
                   <button
-                    onClick={() => setShowSimulationBar((prev) => !prev)}
-                    className="hidden sm:flex items-center gap-1.5 bg-amber-600/90 hover:bg-amber-600 text-white text-xs px-2.5 py-1 rounded-full cursor-pointer transition shadow"
-                    title="Toggle Disaster Scenario Simulation Engine"
+                    onClick={() => {
+                      switchRole("Public / Citizen");
+                      setShowRoleMenu(false);
+                    }}
+                    className={`w-full text-left px-2.5 py-2 rounded-lg flex items-center justify-between transition cursor-pointer ${
+                      roleCategory === "user"
+                        ? "bg-sky-50 text-[#07569c] font-semibold"
+                        : "hover:bg-slate-50 text-slate-700"
+                    }`}
                   >
-                    <span>🎯</span>
-                    <span className="font-semibold">Sim Scenario</span>
+                    <span className="flex items-center gap-2">
+                      <span>👤</span> Citizen / Public
+                    </span>
+                    {roleCategory === "user" && <span className="text-[10px] text-sky-600 font-bold">✓ Active</span>}
                   </button>
 
                   <button
-                    onClick={() => setShowAnalytics(true)}
-                    className="hidden md:flex items-center gap-1 text-white hover:text-sky-200 transition-colors cursor-pointer text-xs font-semibold px-2 py-1 rounded hover:bg-sky-900/50"
-                    title="Open Situation Report & Metrics"
+                    onClick={() => {
+                      switchRole("Command Officer / Incident Commander");
+                      setShowRoleMenu(false);
+                    }}
+                    className={`w-full text-left px-2.5 py-2 rounded-lg flex items-center justify-between transition cursor-pointer ${
+                      roleCategory === "admin"
+                        ? "bg-sky-50 text-[#07569c] font-semibold"
+                        : "hover:bg-slate-50 text-slate-700"
+                    }`}
                   >
-                    <span>📊</span> Analytics
+                    <span className="flex items-center gap-2">
+                      <span>🛡️</span> Incident Commander (Admin)
+                    </span>
+                    {roleCategory === "admin" && <span className="text-[10px] text-sky-600 font-bold">✓ Active</span>}
                   </button>
-                </>
-              )}
 
-              {/* Service Provider Quick Status Indicator */}
-              {roleCategory === "service_provider" && (
-                <div className="hidden sm:flex items-center gap-1 text-[11px] bg-slate-900/80 px-2 py-0.5 rounded-full border border-amber-600/50 text-amber-300 font-mono">
-                  <span>Unit:</span>
-                  <span className="font-bold text-white">{currentUser.assignedUnitCallsign || "RESCUE"}</span>
+                  <button
+                    onClick={() => {
+                      switchRole("Medic / Ambulance Team");
+                      setShowRoleMenu(false);
+                    }}
+                    className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-slate-50 text-slate-700 flex items-center justify-between transition cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2">
+                      <span>🚑</span> Paramedic Medic
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      switchRole("Firefighter / Fire Service Officer");
+                      setShowRoleMenu(false);
+                    }}
+                    className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-slate-50 text-slate-700 flex items-center justify-between transition cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2">
+                      <span>🚒</span> Firefighter
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      switchRole("NDRF / SDRF Team Leader or Responder");
+                      setShowRoleMenu(false);
+                    }}
+                    className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-slate-50 text-slate-700 flex items-center justify-between transition cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2">
+                      <span>🚤</span> NDRF Rescue
+                    </span>
+                  </button>
+
+                  <div className="pt-1.5 border-t border-slate-100 space-y-1">
+                    <button
+                      onClick={() => {
+                        setShowRoleWorkspace(true);
+                        setShowRoleMenu(false);
+                      }}
+                      className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-sky-50 text-[#07569c] flex items-center gap-2 transition cursor-pointer font-medium"
+                    >
+                      <span>📋</span> Open Role Workspace
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        logout();
+                        setShowRoleMenu(false);
+                      }}
+                      className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-red-50 text-red-600 flex items-center gap-2 transition cursor-pointer font-semibold"
+                    >
+                      <span>🚪</span> Sign Out
+                    </button>
+                  </div>
                 </div>
               )}
-
-              {/* Switch Role Quick Dropdown */}
-              <div className="relative">
-                <button
-                  onClick={() => setShowRoleMenu(!showRoleMenu)}
-                  className="bg-slate-900/80 hover:bg-slate-800 text-slate-200 border border-slate-700 px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 cursor-pointer transition"
-                  title="Switch Persona / Account"
-                >
-                  <span className="text-xs">🔄</span>
-                  <span className="hidden md:inline">Switch Role</span>
-                  <span className="text-[9px]">▼</span>
-                </button>
-
-                {showRoleMenu && (
-                  <div className="absolute right-0 mt-2 w-56 bg-slate-950 border border-slate-700 rounded-xl shadow-2xl p-2 z-[1100] text-xs space-y-1">
-                    <div className="px-2 py-1 text-[10px] text-slate-400 font-bold uppercase tracking-wider border-b border-slate-800">
-                      Switch Role View
-                    </div>
-                    <button
-                      onClick={() => {
-                        switchRole("Public / Citizen");
-                        setShowRoleMenu(false);
-                      }}
-                      className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-sky-950 text-slate-200 hover:text-sky-300 flex items-center gap-2 transition cursor-pointer"
-                    >
-                      <span>👤</span> Citizen / User
-                    </button>
-                    <button
-                      onClick={() => {
-                        switchRole("Command Officer / Incident Commander");
-                        setShowRoleMenu(false);
-                      }}
-                      className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-blue-950 text-slate-200 hover:text-blue-300 flex items-center gap-2 transition cursor-pointer"
-                    >
-                      <span>🛡️</span> Incident Commander (Admin)
-                    </button>
-                    <button
-                      onClick={() => {
-                        switchRole("Medic / Ambulance Team");
-                        setShowRoleMenu(false);
-                      }}
-                      className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-amber-950 text-slate-200 hover:text-amber-300 flex items-center gap-2 transition cursor-pointer"
-                    >
-                      <span>🚑</span> Paramedic Medic (Service Provider)
-                    </button>
-                    <button
-                      onClick={() => {
-                        switchRole("Firefighter / Fire Service Officer");
-                        setShowRoleMenu(false);
-                      }}
-                      className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-amber-950 text-slate-200 hover:text-amber-300 flex items-center gap-2 transition cursor-pointer"
-                    >
-                      <span>🚒</span> Firefighter (Service Provider)
-                    </button>
-                    <button
-                      onClick={() => {
-                        switchRole("NDRF / SDRF Team Leader or Responder");
-                        setShowRoleMenu(false);
-                      }}
-                      className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-amber-950 text-slate-200 hover:text-amber-300 flex items-center gap-2 transition cursor-pointer"
-                    >
-                      <span>🚤</span> NDRF Rescue (Service Provider)
-                    </button>
-                    <div className="pt-1 border-t border-slate-800">
-                      <button
-                        onClick={() => {
-                          logout();
-                          setShowRoleMenu(false);
-                        }}
-                        className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-red-950 text-red-400 hover:text-red-300 flex items-center gap-2 transition cursor-pointer font-semibold"
-                      >
-                        <span>🚪</span> Sign Out to Guest Portal
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Sign Out Button */}
-              <button
-                onClick={logout}
-                className="hidden sm:flex items-center gap-1 bg-red-950/80 hover:bg-red-900 text-red-200 border border-red-800/60 px-2.5 py-1 rounded-full text-xs font-medium cursor-pointer transition"
-                title="Sign Out to General Public View"
-              >
-                <span>🚪</span>
-                <span>Sign Out</span>
-              </button>
-            </>
+            </div>
           )}
 
-          {/* Emergency SOS Distress Intake (Available to All) */}
-          <div
+          {/* Emergency SOS Distress Intake (Single button) */}
+          <button
             onClick={() => setShowCitizenReport(true)}
-            className="flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white text-xs px-3 py-1 rounded-full cursor-pointer transition-colors shadow"
+            className="flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg cursor-pointer transition shadow-xs"
             title="Citizen Distress & SOS Reporting"
           >
             <span className="inline-block w-2 h-2 rounded-full bg-white animate-ping" />
-            <span className="font-bold tracking-wider">REPORT SOS</span>
-          </div>
+            <span>REPORT SOS</span>
+          </button>
 
-          {/* Notifications Bell */}
+          {/* Notifications Bell (Single) */}
           <button
             onClick={() => setShowAlertsDrawer(true)}
-            className="relative p-1.5 text-white hover:text-sky-200 transition-colors cursor-pointer"
+            aria-label={`Open alerts${unreadAlertCount ? `, ${unreadAlertCount} unread` : ""}`}
+            className="relative grid size-8 place-items-center rounded-lg border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 transition cursor-pointer shadow-xs"
             title="Open Emergency Alerts"
           >
-            <span className="text-base">🔔</span>
+            <span className="text-sm">🔔</span>
             {unreadAlertCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+              <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[9px] font-bold rounded-full size-4 flex items-center justify-center shadow-xs">
                 {unreadAlertCount}
               </span>
             )}
@@ -1347,7 +1685,7 @@ function ResQGeoPortalInner() {
           <select
             value={selectedLang}
             onChange={(e) => setSelectedLang(e.target.value)}
-            className="bg-white text-slate-800 border-none rounded px-2 py-1 text-xs font-medium cursor-pointer shadow-sm outline-none hidden sm:block"
+            className="border border-slate-200 bg-white text-slate-700 rounded-lg px-2 py-1 text-xs font-medium cursor-pointer shadow-xs outline-none hidden sm:block hover:border-slate-300"
           >
             <option>English</option>
             <option>हिन्दी</option>
@@ -1357,39 +1695,6 @@ function ResQGeoPortalInner() {
             <option>मराठी</option>
           </select>
         </nav>
-        <nav aria-label="Quick actions" className="flex items-center gap-2">
-          {!isAuthenticated && (
-            <button
-              onClick={() => {
-                setAuthModalMode("login");
-                setShowAuthModal(true);
-              }}
-              className="rounded-lg px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/10"
-            >
-              Sign in
-            </button>
-          )}
-          <button
-            onClick={() => setShowCitizenReport(true)}
-            className="rounded-lg bg-red-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-red-700"
-            title="Report an emergency"
-          >
-            Report SOS
-          </button>
-          <button
-            onClick={() => setShowAlertsDrawer(true)}
-            aria-label={`Open alerts${unreadAlertCount ? `, ${unreadAlertCount} unread` : ""}`}
-            className="relative grid size-9 place-items-center rounded-lg text-white transition hover:bg-white/10"
-            title="Alerts"
-          >
-            <span aria-hidden>🔔</span>
-            {unreadAlertCount > 0 && (
-              <span className="absolute right-0.5 top-0.5 grid size-4 place-items-center rounded-full bg-red-500 text-[9px] font-bold text-white">
-                {unreadAlertCount}
-              </span>
-            )}
-          </button>
-        </nav>
       </header>
 
       {/* ============ SEARCH PANEL ============ */}
@@ -1397,7 +1702,7 @@ function ResQGeoPortalInner() {
         onClick={() => setShowNavDrawer(true)}
         aria-label="Open navigation sidebar"
         title="Open navigation"
-        className="fixed left-0 top-1/2 z-[950] grid h-12 w-7 -translate-y-1/2 place-items-center rounded-r-lg border border-l-0 border-sky-200 bg-white/95 text-lg font-semibold text-[#07569c] shadow-lg transition hover:w-9 hover:bg-white"
+        className="fixed left-0 top-1/2 z-[1050] grid h-12 w-7 -translate-y-1/2 place-items-center rounded-r-lg border border-l-0 border-sky-200 bg-white/95 text-lg font-semibold text-[#07569c] shadow-lg transition hover:w-9 hover:bg-white cursor-pointer pointer-events-auto"
       >
         ›
       </button>
@@ -1434,7 +1739,7 @@ function ResQGeoPortalInner() {
 
       {/* ============ BASEMAP SWITCHER ============ */}
       {showLayerMenu && (
-        <div className="fixed top-[110px] left-3 z-[950] w-84 bg-white rounded-xl shadow-2xl border border-slate-200 p-3.5 animate-fadeIn">
+        <div className="fixed top-[110px] left-3 z-[1050] w-84 bg-white rounded-xl shadow-2xl border border-slate-200 p-3.5 animate-fadeIn">
           <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
             <div>
               <span className="text-xs font-bold uppercase tracking-wider text-slate-700 block">Basemap Views</span>
@@ -1488,7 +1793,7 @@ function ResQGeoPortalInner() {
 
       {/* Measurement Status */}
       {isMeasuring && (
-        <div className="fixed top-[60px] left-1/2 -translate-x-1/2 z-[900] bg-blue-900/90 text-white backdrop-blur px-4 py-1.5 rounded-full shadow-lg border border-blue-400/40 text-xs flex items-center gap-3">
+        <div className="fixed top-[60px] left-1/2 -translate-x-1/2 z-[1050] bg-blue-900/90 text-white backdrop-blur px-4 py-1.5 rounded-full shadow-lg border border-blue-400/40 text-xs flex items-center gap-3">
           <span>📏 <b>Measuring:</b> {measureDistance}</span>
           <button
             onClick={toggleMeasurement}
@@ -1500,12 +1805,12 @@ function ResQGeoPortalInner() {
       )}
 
       {/* ============ MAP TOOLS ============ */}
-      <div className="fixed right-4 top-1/2 z-[900] flex -translate-y-1/2 flex-col gap-1 rounded-xl border border-slate-200/80 bg-white/95 p-1 shadow-lg backdrop-blur">
+      <div className="fixed right-4 top-1/2 z-[1050] flex -translate-y-1/2 flex-col gap-1 rounded-xl border border-slate-200/80 bg-white/95 p-1 shadow-lg backdrop-blur pointer-events-auto">
         <button
           onClick={() => mapRef.current?.zoomIn(1, { animate: true })}
           title="Zoom In"
           aria-label="Zoom in"
-          className="grid size-9 place-items-center rounded-lg text-lg font-semibold text-slate-700 transition hover:bg-slate-100"
+          className="grid size-9 place-items-center rounded-lg text-lg font-semibold text-slate-700 transition hover:bg-slate-100 cursor-pointer"
         >
           ＋
         </button>
@@ -1513,7 +1818,7 @@ function ResQGeoPortalInner() {
           onClick={() => mapRef.current?.zoomOut(1, { animate: true })}
           title="Zoom Out"
           aria-label="Zoom out"
-          className="grid size-9 place-items-center rounded-lg text-lg font-semibold text-slate-700 transition hover:bg-slate-100"
+          className="grid size-9 place-items-center rounded-lg text-lg font-semibold text-slate-700 transition hover:bg-slate-100 cursor-pointer"
         >
           －
         </button>
@@ -1521,11 +1826,12 @@ function ResQGeoPortalInner() {
           onClick={handleLocateMe}
           title="My Location"
           aria-label="Show my location"
-          className="grid size-9 place-items-center rounded-lg text-base text-slate-700 transition hover:bg-slate-100"
+          className="grid size-9 place-items-center rounded-lg text-base text-slate-700 transition hover:bg-slate-100 cursor-pointer"
         >
           📍
         </button>
       </div>
+
 
       {/* ============ BOTTOM STATUS & AREA ============ */}
       <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[900] hidden sm:flex items-center gap-2 bg-slate-950/85 backdrop-blur text-white text-[11px] px-3 py-1.5 rounded-full shadow-xl border border-white/10 pointer-events-none">
@@ -1618,20 +1924,97 @@ function ResQGeoPortalInner() {
                       onClick={() => {
                         setShowNavDrawer(false);
                         setShowDashboard(false);
-                        setMapReady(false);
                         setShowMapView(false);
+                        setActiveTab("dashboard");
                       }}
-                      className="w-full cursor-pointer rounded-lg px-3 py-2.5 text-left font-medium text-slate-700 transition-colors hover:bg-slate-100"
+                      className="w-full cursor-pointer rounded-lg px-3 py-2 text-left font-medium text-slate-700 transition-colors hover:bg-slate-100 flex items-center gap-2"
                     >
-                      <span aria-hidden className="mr-2 text-[#07569c]">⌂</span> Home dashboard
+                      <span aria-hidden className="text-[#07569c]">▦</span> Home dashboard
                     </button>
-                    <div aria-current="page" className="w-full rounded-lg bg-sky-50 px-3 py-2.5 font-semibold text-[#07569c]">
-                      <span aria-hidden className="mr-2">⌖</span> Incident map
+                    <button
+                      onClick={() => {
+                        setShowNavDrawer(false);
+                        setShowDashboard(false);
+                        setShowMapView(false);
+                        setActiveTab("incidents");
+                      }}
+                      className="w-full cursor-pointer rounded-lg px-3 py-2 text-left font-medium text-slate-700 transition-colors hover:bg-slate-100 flex items-center gap-2"
+                    >
+                      <span aria-hidden className="text-blue-600">◉</span> Live incidents
+                    </button>
+                    <div aria-current="page" className="w-full rounded-lg bg-sky-50 px-3 py-2 font-semibold text-[#07569c] flex items-center gap-2">
+                      <span aria-hidden>⌖</span> Incident map
                     </div>
-                    <button onClick={() => { setShowNavDrawer(false); setShowRoleWorkspace(true); }} className="w-full rounded-lg px-3 py-2.5 text-left font-medium text-slate-700 transition-colors hover:bg-slate-100"><span aria-hidden className="mr-2">▤</span> Operations workspace</button>
-                    <button onClick={() => { setShowNavDrawer(false); setShowAnalytics(true); }} className="w-full rounded-lg px-3 py-2.5 text-left font-medium text-slate-700 transition-colors hover:bg-slate-100"><span aria-hidden className="mr-2">▥</span> Analytics &amp; reports</button>
-                    <button onClick={() => { setShowNavDrawer(false); setShowAlertsDrawer(true); }} className="w-full rounded-lg px-3 py-2.5 text-left font-medium text-slate-700 transition-colors hover:bg-slate-100"><span aria-hidden className="mr-2">♧</span> Alerts <span className="float-right rounded-full bg-red-50 px-2 text-xs text-red-600">{unreadAlertCount}</span></button>
-                    <button onClick={() => { setShowNavDrawer(false); setShowCitizenReport(true); }} className="w-full rounded-lg px-3 py-2.5 text-left font-semibold text-red-700 transition-colors hover:bg-red-50"><span aria-hidden className="mr-2">!</span> Report an emergency</button>
+                    <button
+                      onClick={() => {
+                        setShowNavDrawer(false);
+                        setShowDashboard(false);
+                        setShowMapView(false);
+                        setActiveTab("dispatch");
+                      }}
+                      className="w-full cursor-pointer rounded-lg px-3 py-2 text-left font-medium text-slate-700 transition-colors hover:bg-slate-100 flex items-center gap-2"
+                    >
+                      <span aria-hidden className="text-amber-600">➤</span> Dispatch center
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowNavDrawer(false);
+                        setShowDashboard(false);
+                        setShowMapView(false);
+                        setActiveTab("responders");
+                      }}
+                      className="w-full cursor-pointer rounded-lg px-3 py-2 text-left font-medium text-slate-700 transition-colors hover:bg-slate-100 flex items-center gap-2"
+                    >
+                      <span aria-hidden className="text-purple-600">♙</span> Responders
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowNavDrawer(false);
+                        setShowDashboard(false);
+                        setShowMapView(false);
+                        setActiveTab("resources");
+                      }}
+                      className="w-full cursor-pointer rounded-lg px-3 py-2 text-left font-medium text-slate-700 transition-colors hover:bg-slate-100 flex items-center gap-2"
+                    >
+                      <span aria-hidden className="text-emerald-600">📦</span> Resources &amp; Inventory
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowNavDrawer(false);
+                        setShowDashboard(false);
+                        setShowMapView(false);
+                        setActiveTab("analytics");
+                      }}
+                      className="w-full cursor-pointer rounded-lg px-3 py-2 text-left font-medium text-slate-700 transition-colors hover:bg-slate-100 flex items-center gap-2"
+                    >
+                      <span aria-hidden className="text-indigo-600">▥</span> Analytics &amp; reports
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowNavDrawer(false);
+                        setShowAlertsDrawer(true);
+                      }}
+                      className="w-full cursor-pointer rounded-lg px-3 py-2 text-left font-medium text-slate-700 transition-colors hover:bg-slate-100 flex items-center justify-between"
+                    >
+                      <span className="flex items-center gap-2">
+                        <span aria-hidden className="text-red-500">♧</span> Alerts
+                      </span>
+                      {unreadAlertCount > 0 && (
+                        <span className="rounded-full bg-red-50 px-2 text-xs font-bold text-red-600">
+                          {unreadAlertCount}
+                        </span>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowNavDrawer(false);
+                        setShowCitizenReport(true);
+                      }}
+                      className="w-full cursor-pointer rounded-lg px-3 py-2 text-left font-semibold text-red-700 transition-colors hover:bg-red-50 flex items-center gap-2"
+                    >
+                      <span aria-hidden>!</span> Report an emergency
+                    </button>
+
                   </div>
                 </div>
                 <details className="rounded-lg border border-slate-200 px-3 py-2">
