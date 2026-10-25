@@ -15,9 +15,8 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./backend/db/migrations/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
-      - ./backend/db/seeds/seed_data.sql:/docker-entrypoint-initdb.d/02_seed_data.sql
-      - ./backend/db/migrations/02_dm_module.sql:/docker-entrypoint-initdb.d/03_dm_module.sql
+
+
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-drch_db}"]
       interval: 5s
@@ -85,6 +84,7 @@ services:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@postgres-postgis:5432/${POSTGRES_DB:-drch_db}
       - REDIS_URL=redis://redis:6379/0
       - JWT_SECRET=${JWT_SECRET:-insecure_default_jwt_secret_at_least_32_chars_long}
+      - AI_TRIAGE_URL=${AI_TRIAGE_URL:-http://ai-workers:8001/triage}
     volumes:
       - ./backend:/app
     depends_on:
@@ -100,9 +100,12 @@ services:
     build:
       context: ./ai-workers
     container_name: drch_ai_workers
+    ports:
+      - "8001:8001"
     environment:
       - RABBITMQ_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASS:-guest}@rabbitmq:5672/
       - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@postgres-postgis:5432/${POSTGRES_DB:-drch_db}
     volumes:
       - ./ai-workers:/app
     depends_on:
