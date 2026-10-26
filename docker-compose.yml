@@ -84,7 +84,8 @@ services:
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@postgres-postgis:5432/${POSTGRES_DB:-drch_db}
       - REDIS_URL=redis://redis:6379/0
-      - JWT_SECRET=${JWT_SECRET:-insecure_default_jwt_secret_at_least_32_chars_long}
+      - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET in .env before starting the backend}
+      - DEMO_MODE=${DEMO_MODE:-false}
     volumes:
       - ./backend:/app
     depends_on:

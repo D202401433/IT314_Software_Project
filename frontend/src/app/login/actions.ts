@@ -66,7 +66,7 @@ async function verifyCode(prev: LoginState, form: FormData): Promise<LoginState>
     return { step: expired ? "password" : "mfa", error: err?.message ?? "Verification failed.", email: prev.email };
   }
   jar.delete(MFA_COOKIE);
-  if (res.data.role !== "DISASTER_MGMT" && res.data.role !== "APP_MGMT") {
+  if (res.data.role !== "DISASTER_MGMT") {
     await post("/api/v1/auth/logout", {}, res.data.access_token);
     return { step: "password", error: "This workspace is for Disaster Management staff." };
   }

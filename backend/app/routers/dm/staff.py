@@ -123,7 +123,10 @@ _DEMO_STAFF = [
 def create_staff(body: CreateStaffRequest, principal: Supervisor):
     """Provision a new DM staff account. Returns the TOTP secret once."""
     from app.config import get_settings
-    if not get_settings().database_url:
+    settings = get_settings()
+    if not settings.database_url:
+        if not settings.demo_mode:
+            settings.require("database_url")
         if any(s["email"].lower() == body.email.strip().lower() for s in _DEMO_STAFF):
             raise ApiError(409, "EMAIL_TAKEN", f"An account with email {body.email} already exists")
         new_id = str(uuid.uuid4())
@@ -157,134 +160,99 @@ def create_staff(body: CreateStaffRequest, principal: Supervisor):
             ),
         }
 
-    try:
-        with db.transaction() as conn:
-            if conn.execute("SELECT 1 FROM users WHERE email = %s::citext", (body.email,)).fetchone():
-                raise ApiError(409, "EMAIL_TAKEN", f"An account with email {body.email} already exists")
+    with db.transaction() as conn:
+        if conn.execute("SELECT 1 FROM users WHERE email = %s::citext", (body.email,)).fetchone():
+            raise ApiError(409, "EMAIL_TAKEN", f"An account with email {body.email} already exists")
 
-            password_hash = security.hash_password(body.password)
-            user_id = conn.execute(
-                """
-                INSERT INTO users (role_id, email, full_name, phone, designation, status)
-                SELECT role_id, %s, %s, %s, %s, 'ACTIVE' FROM roles WHERE code = %s
-                RETURNING user_id
-                """,
-                (body.email, body.full_name, body.phone, body.designation, DM_ROLE),
-            ).fetchone()["user_id"]
+        password_hash = security.hash_password(body.password)
+        user_id = conn.execute(
+            """
+            INSERT INTO users (role_id, email, full_name, phone, designation, status)
+            SELECT role_id, %s, %s, %s, %s, 'ACTIVE' FROM roles WHERE code = %s
+            RETURNING user_id
+            """,
+            (body.email, body.full_name, body.phone, body.designation, DM_ROLE),
+        ).fetchone()["user_id"]
 
-            conn.execute(
-                "INSERT INTO user_auth (user_id, password_hash) VALUES (%s, %s)",
-                (user_id, password_hash),
-            )
-            _set_permissions(conn, user_id, body.permissions)
-            mfa = _enrol_mfa(conn, user_id, body.email)
+        conn.execute(
+            "INSERT INTO user_auth (user_id, password_hash) VALUES (%s, %s)",
+            (user_id, password_hash),
+        )
+        _set_permissions(conn, user_id, body.permissions)
+        mfa = _enrol_mfa(conn, user_id, body.email)
 
-            audit.record(
-                conn,
-                actor=principal,
-                action="STAFF_PROVISIONED",
-                entity_type="user",
-                entity_id=user_id,
-                rationale=f"Provisioned via DM workspace by {principal.email}",
-                after={"role": DM_ROLE, "permissions": body.permissions},
-            )
+        audit.record(
+            conn,
+            actor=principal,
+            action="STAFF_PROVISIONED",
+            entity_type="user",
+            entity_id=user_id,
+            rationale=f"Provisioned via DM workspace by {principal.email}",
+            after={"role": DM_ROLE, "permissions": body.permissions},
+        )
 
-        return {
-            "user_id": str(user_id),
-            "email": body.email,
-            "full_name": body.full_name,
-            "permissions": body.permissions,
-            "mfa_secret": mfa["mfa_secret"],
-            "mfa_uri": mfa["mfa_uri"],
-            "message": (
-                "Account created. Share the MFA secret with the new staff member to enrol "
-                "in their authenticator app. It will not be shown again."
-            ),
-        }
-    except ApiError:
-        raise
-    except Exception:
-        # DB offline fallback
-        new_id = str(uuid.uuid4())
-        secret = security.new_totp_secret()
-        mfa = {
-            "mfa_secret": secret,
-            "mfa_uri": security.provisioning_uri(secret, body.email),
-        }
-        _DEMO_STAFF.append({
-            "user_id": new_id,
-            "email": body.email.strip(),
-            "full_name": body.full_name.strip(),
-            "designation": body.designation,
-            "status": "ACTIVE",
-            "mfa_enabled": True,
-            "last_login_at": None,
-            "is_locked": False,
-            "permissions": body.permissions,
-            "created_at": datetime.now(UTC).isoformat(),
-        })
-        return {
-            "user_id": new_id,
-            "email": body.email,
-            "full_name": body.full_name,
-            "permissions": body.permissions,
-            "mfa_secret": mfa["mfa_secret"],
-            "mfa_uri": mfa["mfa_uri"],
-            "message": (
-                "Account created. Share the MFA secret with the new staff member to enrol "
-                "in their authenticator app. It will not be shown again."
-            ),
-        }
+    return {
+        "user_id": str(user_id),
+        "email": body.email,
+        "full_name": body.full_name,
+        "permissions": body.permissions,
+        "mfa_secret": mfa["mfa_secret"],
+        "mfa_uri": mfa["mfa_uri"],
+        "message": (
+            "Account created. Share the MFA secret with the new staff member to enrol "
+            "in their authenticator app. It will not be shown again."
+        ),
+    }
 
 
 @router.get("/staff")
 def list_staff(principal: Supervisor):
     """List all Disaster Management staff accounts."""
     from app.config import get_settings
-    if not get_settings().database_url:
+    settings = get_settings()
+    if not settings.database_url:
+        if not settings.demo_mode:
+            settings.require("database_url")
         return _DEMO_STAFF
 
-    try:
-        with db.transaction() as conn:
-            rows = conn.execute(
-                """
-                SELECT u.user_id, u.email, u.full_name, u.designation, u.status,
-                       u.created_at,
-                       a.mfa_enabled, a.last_login_at, a.locked_until,
-                       COALESCE(
-                           json_agg(sp.permission::text ORDER BY sp.permission)
-                           FILTER (WHERE sp.permission IS NOT NULL),
-                           '[]'
-                       ) AS permissions
-                FROM users u
-                JOIN roles r USING (role_id)
-                JOIN user_auth a ON a.user_id = u.user_id
-                LEFT JOIN staff_permissions sp ON sp.user_id = u.user_id
-                WHERE r.code = %s
-                GROUP BY u.user_id, a.mfa_enabled, a.last_login_at, a.locked_until
-                ORDER BY u.created_at DESC
-                """,
-                (DM_ROLE,),
-            ).fetchall()
+    with db.transaction() as conn:
+        rows = conn.execute(
+            """
+            SELECT u.user_id, u.email, u.full_name, u.designation, u.status,
+                   u.created_at,
+                   a.mfa_enabled, a.last_login_at, a.locked_until,
+                   COALESCE(
+                       json_agg(sp.permission::text ORDER BY sp.permission)
+                       FILTER (WHERE sp.permission IS NOT NULL),
+                       '[]'
+                   ) AS permissions
+            FROM users u
+            JOIN roles r USING (role_id)
+            JOIN user_auth a ON a.user_id = u.user_id
+            LEFT JOIN staff_permissions sp ON sp.user_id = u.user_id
+            WHERE r.code = %s
+            GROUP BY u.user_id, a.mfa_enabled, a.last_login_at, a.locked_until
+            ORDER BY u.created_at DESC
+            """,
+            (DM_ROLE,),
+        ).fetchall()
 
-        now = datetime.now(UTC)
-        return [
-            {
-                "user_id": str(r["user_id"]),
-                "email": r["email"],
-                "full_name": r["full_name"],
-                "designation": r["designation"],
-                "status": r["status"],
-                "mfa_enabled": r["mfa_enabled"],
-                "last_login_at": r["last_login_at"],
-                "is_locked": r["locked_until"] is not None and r["locked_until"] > now,
-                "permissions": r["permissions"],
-                "created_at": r["created_at"],
-            }
-            for r in rows
-        ]
-    except Exception:
-        return _DEMO_STAFF
+    now = datetime.now(UTC)
+    return [
+        {
+            "user_id": str(r["user_id"]),
+            "email": r["email"],
+            "full_name": r["full_name"],
+            "designation": r["designation"],
+            "status": r["status"],
+            "mfa_enabled": r["mfa_enabled"],
+            "last_login_at": r["last_login_at"],
+            "is_locked": r["locked_until"] is not None and r["locked_until"] > now,
+            "permissions": r["permissions"],
+            "created_at": r["created_at"],
+        }
+        for r in rows
+    ]
 
 
 @router.put("/staff/{user_id}/permissions", status_code=200)
@@ -293,7 +261,10 @@ def set_permissions(user_id: uuid.UUID, body: SetPermissionsRequest, principal: 
     if user_id == principal.user_id:
         raise ApiError(400, "SELF_MODIFY", "You cannot change your own permissions")
     from app.config import get_settings
-    if not get_settings().database_url:
+    settings = get_settings()
+    if not settings.database_url:
+        if not settings.demo_mode:
+            settings.require("database_url")
         target = next((s for s in _DEMO_STAFF if s["user_id"] == str(user_id)), None)
         if not target:
             raise ApiError(404, "NOT_FOUND", "Staff account not found")
@@ -321,7 +292,10 @@ def reset_mfa(user_id: uuid.UUID, principal: Supervisor):
     if user_id == principal.user_id:
         raise ApiError(400, "SELF_MODIFY", "Use your own account settings to reset your MFA")
     from app.config import get_settings
-    if not get_settings().database_url:
+    settings = get_settings()
+    if not settings.database_url:
+        if not settings.demo_mode:
+            settings.require("database_url")
         secret = security.new_totp_secret()
         return {
             "user_id": str(user_id),
