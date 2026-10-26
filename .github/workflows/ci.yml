@@ -354,7 +354,6 @@ jobs:
         run: |
           echo "Installing latest Vercel CLI..."
           npm install -g vercel@latest
-          cd frontend
           echo "Deploying preview to Vercel..."
           PREVIEW_URL=$(vercel deploy --token="$VERCEL_TOKEN" --yes)
           if [ -z "$PREVIEW_URL" ]; then
