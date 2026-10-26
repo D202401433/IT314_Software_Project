@@ -82,8 +82,9 @@ def install_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(Exception)
     async def _unhandled(_: Request, exc: Exception):
-        from app.config import ConfigError
         import psycopg
+
+        from app.config import ConfigError
 
         if isinstance(exc, ConfigError):
             logger.warning(f"Configuration error: {exc}")

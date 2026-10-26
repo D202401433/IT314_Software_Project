@@ -1,7 +1,7 @@
 """Regression tests for security-sensitive database and demo fallbacks."""
 
-from contextlib import contextmanager
 import uuid
+from contextlib import contextmanager
 
 import pytest
 from starlette.requests import Request

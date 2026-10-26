@@ -10,15 +10,14 @@ Only accounts with the SUPERVISOR permission may call these endpoints.
 The backend enforces this; the frontend only shows the UI to supervisors.
 """
 
-from datetime import UTC, datetime
-
 import uuid
+from datetime import UTC, datetime
 
 from fastapi import APIRouter
 from pydantic import BaseModel, Field, field_validator
 
 from app import audit, db, security
-from app.auth import DM_ROLE, PERMISSIONS, Supervisor, DMUser
+from app.auth import DM_ROLE, PERMISSIONS, Supervisor
 from app.errors import ApiError
 
 router = APIRouter()

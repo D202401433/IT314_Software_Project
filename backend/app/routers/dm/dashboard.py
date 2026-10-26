@@ -3,6 +3,7 @@
 from datetime import UTC, datetime
 
 from fastapi import APIRouter
+from psycopg import Error as PsycopgError
 
 from app import db
 from app.auth import DMUser
@@ -186,5 +187,5 @@ def dashboard(principal: DMUser):
             "verification_queue": queue,
             "recent_activity": recent,
         }
-    except Exception:
+    except PsycopgError:
         return _demo_dashboard_data(datetime.now(UTC), timeout)
