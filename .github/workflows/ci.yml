@@ -354,6 +354,15 @@ jobs:
         run: |
           echo "Installing latest Vercel CLI..."
           npm install -g vercel@latest
+          cd frontend
           echo "Deploying preview to Vercel..."
           PREVIEW_URL=$(vercel deploy --token="$VERCEL_TOKEN" --yes)
-          echo "🚀 Vercel preview successfully deployed to: $PREVIEW_URL"
+          if [ -z "$PREVIEW_URL" ]; then
+            echo "::error::Vercel did not return a preview URL."
+            exit 1
+          fi
+          echo "Vercel preview successfully deployed to: $PREVIEW_URL"
+          {
+            echo "## Vercel Preview"
+            echo "$PREVIEW_URL"
+          } >> "$GITHUB_STEP_SUMMARY"
