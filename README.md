@@ -1,149 +1,87 @@
-# 🚨 Disaster Response Coordination Hub (DRCH)
+# 🚨 Gujarat Disaster Management Platform (DRCH)
 
-> **An AI-Powered, Multi-Modal Emergency Incident Triage, Clustering, and Dispatch Platform for the Indian Disaster Management Ecosystem (NDMA / IRS / ERSS 112).**
-
----
-
-## 📌 Project Overview
-
-The **Disaster Response Coordination Hub (DRCH)** is a unified mission-critical emergency coordination system designed to solve high-stress triage bottlenecks during localized and large-scale catastrophes. 
-
-By ingesting real-time signals across **Social Media (in 22 scheduled Indian languages & Hinglish)**, **ERSS 112 Emergency Call Volume Spikes**, **Drone/UAV Aerial Reconnaissance**, and **NDMA SACHET XML CAP Early Warnings**, DRCH uses GenAI and spatiotemporal algorithms to:
-1. **Filter noise & false alarms** from harsh weather sensor degradation or spam within 10 seconds.
-2. **Deduplicate and cluster** multi-source reports into unified incidents (eliminating duplicate alerts for first responders).
-3. **Assign dynamic priority scores** mapped directly to the **NDMA Incident Response System (IRS)** guidelines.
-4. **Dispatch resources** via specialized role-based views (Field Medics, Firefighters, Logisticians) with interactive live GIS mapping, real-time tactical chat, and offline-first capabilities.
+> **Mission-Critical Emergency Incident Triage, Spatial Clustering, and Field Dispatch Platform tailored for the State of Gujarat (GSDMA / SEOC / NDRF).**
 
 ---
 
-## 🏛️ System Architecture
+## 📌 Project Overview & Scope (Gujarat Only)
 
-```
-                                  [ RAW DATA INGESTION FEEDS ]
-      +-----------------------------------------+-----------------------------------------+
-      |                                         |                                         |
-[Social Media Feeds]                  [ERSS 112 Telecom/VPN]                     [Drone / SACHET]
- (22 Indic Langs + Hinglish)            (Call Spikes & Geo-Zones)             (Aerial Hazard / XML CAP)
-      |                                         |                                         |
-      v                                         v                                         v
- [Indic NLP & Text Extraction]       [ERSS Protocol & Rate Monitor]         [Sensor Weather Filter & CV]
-      +-----------------------------------------+-----------------------------------------+
-                                                |
-                                                v
-                              +-----------------------------------+
-                              |   GenAI Fast Triage Engine (<10s) |
-                              |   (Distress vs False Alarm Class) |
-                              +-----------------------------------+
-                                                |
-                                     [If Distress Confirmed]
-                                                v
-                              +-----------------------------------+
-                              | Spatiotemporal & Semantic Cluster |
-                              | (DBSCAN / H3 Spatial Indexing)    |
-                              +-----------------------------------+
-                                                |
-                                                v
-                              +-----------------------------------+
-                              |   IRS Dynamic Priority Engine     |
-                              |   (NDMA Severity & Resource Matrix)|
-                              +-----------------------------------+
-                                                |
-                                                v
-                              +-----------------------------------+
-                              | WebSocket / Real-time Event Hub   |
-                              +-----------------------------------+
-                                                |
-            +-----------------------------------+-----------------------------------+
-            |                                   |                                   |
-            v                                   v                                   v
-[Logistician / Dispatcher Map]         [Field Medic Portal]              [Firefighter Hazard Portal]
-- Shared Live Map (Pins/Layers)        - Triage Vitals / Casualties      - Aerial Hazard & Wind Vectors
-- Resource Queue & Assignment          - Route Navigation Alerts         - Environmental Hazard Data
-- NDMA Escalation Controls             - Incident Chat                   - Incident Chat
-            +-----------------------------------+-----------------------------------+
-                                                |
-                                                v
-                              +-----------------------------------+
-                              | Offline Mesh / IndexedDB Sync     |
-                              | GenAI Incident Summary & Audit    |
-                              +-----------------------------------+
-```
+The **Disaster Response Coordination Hub (DRCH)** is an operational emergency coordination platform built specifically for the **State of Gujarat**, integrating the state emergency operation centers (SEOC), Gujarat State Disaster Management Authority (GSDMA), district administrations across all 33 Gujarat districts, NDRF 6th Battalion (Vadodara), SDRF, and fire/medical emergency networks.
+
+### 🌐 What is Real vs. What is Simulated
+
+To maintain strict engineering rigor, the platform explicitly distinguishes between live production systems and simulated demonstration sandboxes:
+
+| Component | Status | Implementation Details |
+| :--- | :--- | :--- |
+| **Database & GIS** | **Real** | PostgreSQL 16 with PostGIS spatial geography types (`GEOGRAPHY(Point, 4326)`), GiST spatial indexing, BCNF normalization, and versioned migration runner. |
+| **Audit Trail** | **Real** | Append-only cryptographic audit log with SHA-256 hash chaining (`prev_hash` -> `row_hash`) enforced by database triggers. |
+| **Authentication & RBAC**| **Real** | Argon2id password hashing, TOTP-based Multi-Factor Authentication (MFA), token-version instantaneous JWT revocation, and database-backed permission guards. |
+| **Incident Lifecycle** | **Real** | Strict state machine (`SUBMITTED` -> `NEEDS_INFORMATION` -> `VERIFIED` -> `DISPATCHED` -> `RESOLVED` -> `CLOSED`), duplicate candidate detection, and 60-second auto-escalation loop. |
+| **Public Gujarat Map** | **Real** | Leaflet-based GIS map clamped strictly to Gujarat state boundaries (`GUJARAT_BBOX`), rendering only verified incidents without reporter PII. |
+| **External Ingestion** | **Real** | USGS real-time seismic feed filtered to Gujarat coordinates with duplicate avoidance on `(source, source_uid)`. |
+| **Payments & Donations** | **Simulated Sandbox** | `MockGateway` providing cryptographic HMAC signatures with explicit `SANDBOX` indicators; pluggable adapter ready for live test credentials. |
+| **Social Distress Feeds** | **Simulated / Replay** | Replay and synthetic distress post feeds flagged with `is_simulated = TRUE` for triage drills and prompt injection testing. |
+| **AI Triage Baseline** | **Real Rules / Sandbox LLM** | In-process rule-based priority and scenario classifier with guardrails, with an optional sandboxed LLM adapter for low-confidence cases. |
 
 ---
 
-## 👥 10-Member Team Roster & Ownership Matrix
+## ⚡ Staging & Cold-Start Notice
 
-| Member | Designated Role | Primary Modules & Responsibilities | Key FR / NFR Mapping |
+* **Backend Service (Render):** Deployed on Render's free tier. Services automatically sleep after inactivity. The first request after an idle period may experience a **30 to 50 second cold start** while the container initializes and connects to Neon PostgreSQL.
+* **Database (Neon):** Managed serverless PostgreSQL 16 with PostGIS enabled.
+* **Frontend (Vercel):** Next.js production preview deployments.
+* **Health Check:** Always verify system readiness at `GET /health` and `GET /health/ready`.
+
+---
+
+## 👥 Team Roster & Ownership Matrix
+
+| Member | Group | Role in Project | Key Module Ownership |
 | :--- | :--- | :--- | :--- |
-| **Member 1** | **Team Lead & System Architect** | System architecture, API Gateway, core orchestrator, DB schemas, inter-service contracts. | Core Engine, DR4 |
-| **Member 2** | **Gov & Telecom Ingestion Engineer** | C-DAC ERSS 112 VPN connector, SACHET XML CAP alerts ingestion, export engine. | FR2, FR10, FR11, DR2 |
-| **Member 3** | **NLP & Indic GenAI Engineer** | Social media ingestion, 22 Indic languages + Hinglish parsing, 10s LLM triage prompt pipeline. | FR1, NFR1, DR3 |
-| **Member 4** | **Computer Vision & Drone Engineer** | Drone stream ingestion, aerial hazard detection (fire/flood/debris), weather sensor noise filter. | FR3 |
-| **Member 5** | **Geospatial & Clustering Engineer** | Geo-resolution, spatiotemporal clustering (DBSCAN/H3), NDMA/IRS dynamic priority scoring. | FR4, FR5, DR1 |
-| **Member 6** | **Frontend Lead & GIS Map Engineer** | Interactive live map UI (Leaflet/Mapbox), incident pins, clustering visuals, offline tile cache. | FR6, NFR5 |
-| **Member 7** | **Frontend Engineer (Role Portals)** | Role-based dashboards (Medic, Firefighter, Logistician), RBAC guards, responsive tactical UI. | FR7, NFR4 |
-| **Member 8** | **Real-Time & Mesh Sync Engineer** | WebSockets/Socket.io event bus, incident chat, offline local storage & P2P/mesh sync fallback. | FR8, NFR5 |
-| **Member 9** | **GenAI Summarizer & Compliance Officer** | GenAI incident debrief generation, DPDP Act 2023 PII redaction/anonymization, DDMA audit logs. | FR9, FR11, DR3 |
-| **Member 10** | **DevOps, SRE & QA Lead** | MeitY cloud setup, Docker/K8s, Redis/Kafka broker, 10x spike load testing, 99.9% HA monitoring. | NFR2, NFR3, DR4 |
+| **Siddh** | **Leader** | Tech Lead & Integration Owner | CI/CD, database migrations (01-04), secrets management, merge gatekeeper, repo hygiene. |
+| **Zalak** | Frontend & Backend | Citizen & Public Backend Lead | Citizen auth/register API, incident reporting, timeline, LLM adapter, AI-vs-human analytics. |
+| **Nisarg** | Frontend & Backend | Dispatch & Field Backend Lead | Field team role & assignments API, Gujarat geofencing (`geo.py`), team recommendation engine. |
+| **Shlok** | Frontend & Backend | Payments & Dispatch Refactor | Payment gateway interface & MockGateway, donation APIs, signal promotion, state transitions. |
+| **Rudra** | ML | Ingestion & External Feeds | Official alert adapters (USGS, SACHET CAP), ingestion runs scheduler, AI service skeleton. |
+| **Neeti** | ML (GenAI) | AI Lead | Dataset design, text classification models, evaluation harness, AI triage integration & guardrails. |
+| **Dhruvil** | ML | Computer Vision & Similarity | Image classification reproduction, duplicate text-similarity model, in-process model provider. |
+| **Janvi** | Frontend & Backend | Frontend Lead (Citizen & Field) | Citizen report forms, My Reports timeline, Field responder dashboards, alerts map layer. |
+| **Tanishq** | Frontend & Backend | Frontend Lead (Public & Dispatch)| Public Gujarat interactive map, Dispatcher workspace console, recommendations UI. |
+| **Dhruv** | Frontend & Backend | QA & Test Lead | DB test fixtures, smoke test suite (`scripts/smoke.py`), ran-and-skipped guard, scenario tests. |
 
 ---
 
-## 📅 Phase-Wise Implementation Roadmap (5 Phases / 10 Weeks)
+## 📅 3-Sprint Implementation Plan
 
 ```mermaid
 gantt
-    title Disaster Response Coordination Hub - 10-Week Timeline
+    title Gujarat Disaster Management Platform - 3-Sprint Roadmap
     dateFormat  YYYY-MM-DD
-    section Phase 1: Inception & Core Setup
-    Architecture & Schemas (M1)            :p1_m1, 2026-10-01, 14d
-    ERSS & SACHET Ingestion Specs (M2)    :p1_m2, 2026-10-01, 14d
-    Social Scraper & Indic NLP PoC (M3)    :p1_m3, 2026-10-01, 14d
-    Drone CV & Sensor Noise Models (M4)    :p1_m4, 2026-10-01, 14d
-    Spatial Schemas & Mock Data (M5)       :p1_m5, 2026-10-01, 14d
-    Map UI Boilerplate & Design System (M6):p1_m6, 2026-10-01, 14d
-    Auth, RBAC & Dashboard Shells (M7)     :p1_m7, 2026-10-01, 14d
-    WebSocket Architecture & Protocol (M8) :p1_m8, 2026-10-01, 14d
-    DPDP Compliance Guidelines & Schemas (M9):p1_m9, 2026-10-01, 14d
-    CI/CD Pipeline & Docker Baseline (M10) :p1_m10, 2026-10-01, 14d
+    section Sprint 1: Core Loop
+    Migrations 03/04 & Gujarat Seeds (Siddh)     :s1_siddh, 2026-10-24, 5d
+    Citizen Register & Report API (Zalak)        :s1_zalak, 2026-10-24, 5d
+    Public Verified API & Geo Fence (Nisarg)     :s1_nisarg, 2026-10-24, 5d
+    Public Map & Dispatcher UI on Real Data (Tanishq):s1_tanishq, 2026-10-24, 5d
+    Ingestion Base & USGS Adapter (Rudra)        :s1_rudra, 2026-10-24, 5d
+    Payment Foundation & MockGateway (Shlok)     :s1_shlok, 2026-10-24, 5d
+    Test Harness & Smoke Automation (Dhruv)      :s1_dhruv, 2026-10-24, 5d
 
-    section Phase 2: Core Processing & GenAI
-    Pipeline Orchestrator & Services (M1) :p2_m1, after p1_m1, 14d
-    112 Ingestion & SACHET Parsers (M2)    :p2_m2, after p1_m2, 14d
-    10s GenAI Triage Pipeline (M3)         :p2_m3, after p1_m3, 14d
-    Aerial Hazard CV Detector (M4)         :p2_m4, after p1_m4, 14d
-    DBSCAN/H3 Clustering & IRS Matrix (M5) :p2_m5, after p1_m5, 14d
-    Live Geospatial Layer Integration (M6) :p2_m6, after p1_m6, 14d
-    Medic & Firefighter UI Views (M7)      :p2_m7, after p1_m7, 14d
-    Real-Time Event Stream Broker (M8)     :p2_m8, after p1_m8, 14d
-    Automated PII Scrubbing Service (M9)   :p2_m9, after p1_m9, 14d
-    Redis/Kafka Queue Setup & Tests (M10)  :p2_m10, after p1_m10, 14d
+    section Sprint 2: Response & AI
+    Field Team Backend & Assignments (Nisarg)    :s2_nisarg, after s1_siddh, 5d
+    Team Recommendations Engine (Nisarg)         :s2_recs, after s1_siddh, 5d
+    Field Team Mobile Dashboards (Janvi)         :s2_janvi, after s1_zalak, 5d
+    Text AI Model v1 & Triage Integration (Neeti):s2_neeti, after s1_rudra, 5d
+    Duplicate Text Similarity v2 (Dhruvil)       :s2_dhruvil, after s1_rudra, 5d
+    Ingestion 10-Min Scheduler & CAP (Rudra)     :s2_sched, after s1_rudra, 5d
+    Donations End-to-End Verification (Shlok)    :s2_pay, after s1_shlok, 5d
 
-    section Phase 3: Real-Time Hub & Tactical Dashboards
-    API Aggregator & Event Routers (M1)    :p3_m1, after p2_m1, 14d
-    Spatial Correlation with 112 Calls (M2):p3_m2, after p2_m2, 14d
-    Confidence Scoring & Indic Dialects(M3):p3_m3, after p2_m3, 14d
-    Drone Stream Overlay & Alerts (M4)     :p3_m4, after p2_m4, 14d
-    Dynamic Priority Adjustment (M5)       :p3_m5, after p2_m5, 14d
-    Dispatcher Interactive Console (M6)    :p3_m6, after p2_m6, 14d
-    Tactical Action & Dispatch UI (M7)     :p3_m7, after p2_m7, 14d
-    Incident Chat Engine (FR8) (M8)        :p3_m8, after p2_m8, 14d
-    GenAI Incident Brief Summarizer (M9)   :p3_m9, after p2_m9, 14d
-    Staging Environment Deploy (M10)       :p3_m10, after p2_m10, 14d
-
-    section Phase 4: Offline Resiliency & Audit
-    System Fault-Tolerance & Gateways (M1) :p4_m1, after p3_m1, 14d
-    NDMA/DDMA Report Exporter (M2)         :p4_m2, after p3_m2, 14d
-    Triage Pipeline Latency Tuning (M3)    :p4_m3, after p3_m3, 14d
-    Degradation Edge Case Handling (M4)    :p4_m4, after p3_m4, 14d
-    Spatial Performance Optimizations (M5) :p4_m5, after p3_m5, 14d
-    Offline Vector/Tile Caching (M6)       :p4_m6, after p3_m6, 14d
-    Offline Form Sync & Field Polish (M7)  :p4_m7, after p3_m7, 14d
-    P2P / Mesh Local Sync Failover (M8)    :p4_m8, after p3_m8, 14d
-    Audit Trail Ledger & Export (M9)       :p4_m9, after p3_m9, 14d
-    Load Testing (10x Spike Simulation) (M10):p4_m10, after p3_m10, 14d
-
-    section Phase 5: Final Hardening & Field Pilot
-    Full System End-to-End Drills (All)   :p5_all, after p4_m1, 14d
+    section Sprint 3: Harden & Release
+    RBAC & Security Audit Matrix (Siddh/Dhruv)   :s3_sec, after s2_nisarg, 5d
+    End-to-End Cyclone Scenario (Dhruv)          :s3_scen, after s2_nisarg, 5d
+    AI Error Analysis & Decision (Neeti/Zalak)   :s3_ai, after s2_neeti, 5d
+    Frontend Accessibility & Polish (Janvi/Tanishq):s3_fe, after s2_janvi, 5d
+    Production Deployment & Fallback (Siddh)     :s3_prod, after s3_sec, 5d
 ```
 
 ---
@@ -339,9 +277,12 @@ cp .env.example .env
 When setting up locally or connecting to a remote PostgreSQL/Neon database, apply the schema migration and baseline seed data:
 
 ```bash
-# Using psql with your DATABASE_URL:
-psql "$DATABASE_URL" -f backend/db/migrations/01_schema.sql
-psql "$DATABASE_URL" -f backend/db/seeds/seed_data.sql
+# Using the automated migration runner (applies all migrations & seeds in order, skipping already run):
+cd backend && python -m app.migrate
+
+# Or manually applying via psql:
+for f in $(find backend/db/migrations -name '*.sql' | sort -V); do psql "$DATABASE_URL" -f "$f"; done
+for s in $(find backend/db/seeds -name '*.sql' | sort -V); do psql "$DATABASE_URL" -f "$s"; done
 ```
 *Note: In local Docker Compose, `01_schema.sql` is automatically mounted into `/docker-entrypoint-initdb.d/`.*
 

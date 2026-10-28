@@ -62,10 +62,15 @@ def _ensure_schema() -> None:
     with psycopg.connect(TEST_DB_URL, autocommit=True) as conn:
         has_core = conn.execute("SELECT to_regclass('public.incidents')").fetchone()[0]
         if not has_core:
-            conn.execute((SQL_DIR / "migrations" / "01_schema.sql").read_text(encoding="utf-8"))
-            conn.execute((SQL_DIR / "seeds" / "seed_data.sql").read_text(encoding="utf-8"))
-        # Forward-only and idempotent.
-        conn.execute((SQL_DIR / "migrations" / "02_dm_module.sql").read_text(encoding="utf-8"))
+            for m in sorted((SQL_DIR / "migrations").glob("*.sql")):
+                conn.execute(m.read_text(encoding="utf-8"))
+        else:
+            for m in sorted((SQL_DIR / "migrations").glob("*.sql")):
+                if m.name != "01_schema.sql":
+                    conn.execute(m.read_text(encoding="utf-8"))
+        # Apply all seeds in ascending version order
+        for s in sorted((SQL_DIR / "seeds").glob("*.sql")):
+            conn.execute(s.read_text(encoding="utf-8"))
 
 
 def pytest_collection_modifyitems(config, items):
@@ -80,6 +85,29 @@ def pytest_collection_modifyitems(config, items):
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "db: needs the PostgreSQL test database")
+
+
+def pytest_terminal_summary(terminalreporter, exitstatus, config):
+    passed = len(terminalreporter.stats.get("passed", []))
+    failed = len(terminalreporter.stats.get("failed", []))
+    skipped = len(terminalreporter.stats.get("skipped", []))
+    total_ran = passed + failed
+    terminalreporter.write_sep("=", "DRCH SUITE EXECUTION SUMMARY", bold=True)
+    terminalreporter.write_line(f"Executed Tests: {total_ran} (Passed: {passed}, Failed: {failed})")
+    terminalreporter.write_line(f"Skipped Tests:  {skipped}")
+
+
+def pytest_sessionfinish(session, exitstatus):
+    if os.getenv("REQUIRE_DB_TESTS") == "1":
+        reporter = session.config.pluginmanager.get_plugin("terminalreporter")
+        if reporter:
+            db_tests_ran = any(
+                "db" in rep.keywords
+                for rep in reporter.stats.get("passed", []) + reporter.stats.get("failed", [])
+            )
+            if not db_tests_ran:
+                print("\nFATAL [CI Guard]: REQUIRE_DB_TESTS=1 is active, but 0 DB-backed tests were executed!")
+                session.exitstatus = 1
 
 
 # ----------------------------------------------------------------------- fixtures
@@ -187,6 +215,41 @@ class Factory:
         ).fetchone()
 
 
+    def citizen(self, password: str = "citizen-test-pass") -> dict:
+        user = self.user("NORMAL_USER", password=password, mfa=False)
+        return {**user, "headers": self.token(user, mfa=False)}
+
+    def field_team_user(self, resource_id=None, callsign: str = "Bravo-1", is_leader: bool = True, password: str = "field-team-pass") -> dict:
+        user = self.user("FIELD_TEAM", password=password, mfa=False)
+        if not resource_id:
+            res = self.resource(type_="TEAM")
+            resource_id = res["resource_id"]
+        self.conn.execute(
+            """
+            INSERT INTO field_team_members (user_id, resource_id, callsign, is_leader)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (user_id, resource_id) DO NOTHING
+            """,
+            (user["user_id"], resource_id, callsign, is_leader),
+        )
+        return {**user, "headers": self.token(user, mfa=False), "resource_id": resource_id}
+
+
 @pytest.fixture
 def make(sql):
     return Factory(sql)
+
+
+@pytest.fixture
+def citizen_user(make):
+    return make.citizen()
+
+
+@pytest.fixture
+def staff_user(make):
+    return make.staff("DISPATCH", "SUPERVISOR")
+
+
+@pytest.fixture
+def field_user(make):
+    return make.field_team_user()
