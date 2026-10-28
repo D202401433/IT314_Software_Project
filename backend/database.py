@@ -9,10 +9,13 @@ while remaining self-contained for demo/evaluation purposes.
 """
 
 import json
+import logging
 import os
 import random
 import sqlite3
 from datetime import UTC, datetime
+
+logger = logging.getLogger("resq.database")
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resq_citizen.db")
 
@@ -39,6 +42,7 @@ def init_database():
                 location_name TEXT NOT NULL,
                 lat REAL NOT NULL,
                 lon REAL NOT NULL,
+                district TEXT,
                 affected_people_count INTEGER DEFAULT 1,
                 urgent_needs TEXT DEFAULT '[]',
                 reporter_name TEXT DEFAULT 'Anonymous Citizen',
@@ -51,6 +55,10 @@ def init_database():
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        try:
+            conn.execute("ALTER TABLE citizen_reports ADD COLUMN district TEXT")
+        except sqlite3.OperationalError:
+            pass
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_reports_user ON citizen_reports(user_id, submitted_at DESC)"
         )
@@ -72,13 +80,20 @@ def create_report(user_id: str, data: dict) -> dict:
         report_id = generate_report_id()
         submitted_at = datetime.now(UTC).isoformat()
 
+        district = None
+        try:
+            from app.geo import district_for
+            district = district_for(data["lat"], data["lon"])
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("Failed to resolve district for coordinates: %s", exc)
+
         conn.execute(
             """
             INSERT INTO citizen_reports
-                (id, user_id, category, description, location_name, lat, lon,
+                (id, user_id, category, description, location_name, lat, lon, district,
                  affected_people_count, urgent_needs, reporter_name, reporter_phone,
                  verification_status, source, submitted_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', 'CITIZEN_APP', ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', 'CITIZEN_APP', ?)
             """,
             (
                 report_id,
@@ -88,6 +103,7 @@ def create_report(user_id: str, data: dict) -> dict:
                 data["location_name"],
                 data["lat"],
                 data["lon"],
+                district,
                 data.get("affected_people_count", 1),
                 json.dumps(data.get("urgent_needs", [])),
                 data.get("reporter_name", "Anonymous Citizen"),
@@ -104,6 +120,7 @@ def create_report(user_id: str, data: dict) -> dict:
             "location_name": data["location_name"],
             "lat": data["lat"],
             "lon": data["lon"],
+            "district": district,
             "affected_people_count": data.get("affected_people_count", 1),
             "urgent_needs": data.get("urgent_needs", []),
             "verification_status": "PENDING",
@@ -113,6 +130,7 @@ def create_report(user_id: str, data: dict) -> dict:
         }
     finally:
         conn.close()
+
 
 
 def get_reports_by_user(user_id: str) -> list[dict]:

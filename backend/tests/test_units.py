@@ -62,6 +62,12 @@ def test_ai_guardrails_low_confidence():
 
 
 def test_ai_guardrails_flag_out_of_scope():
+    out = apply_guardrails({"model": "m1", "scenario": "landslide", "priority": "HIGH", "confidence": 0.95})
+    assert out.suggested_scenario is None
+    assert out.factors["out_of_scope"] is True
+    assert out.status == "LOW_CONFIDENCE"
+
+def test_ai_guardrails_reject_earthquake_out_of_scope():
     out = apply_guardrails({"model": "m1", "scenario": "earthquake", "priority": "HIGH", "confidence": 0.95})
     assert out.suggested_scenario is None
     assert out.factors["out_of_scope"] is True
@@ -75,3 +81,101 @@ def test_ai_guardrails_discard_malformed_output():
         out = apply_guardrails(raw)
         assert out.status == "UNSAFE_OUTPUT"
         assert out.suggested_priority is None and out.suggested_scenario is None
+
+
+def test_geo_boundary_and_district_resolution(monkeypatch):
+    from app.geo import district_for, is_in_gujarat
+
+    def mock_resolve(lat, lon):
+        if abs(lat - 23.0225) < 0.1 and abs(lon - 72.5714) < 0.1:
+            return "Ahmedabad", "Gujarat"
+        if abs(lat - 21.1702) < 0.1 and abs(lon - 72.8311) < 0.1:
+            return "Surat", "Gujarat"
+        if abs(lat - 23.2420) < 0.1 and abs(lon - 69.6669) < 0.1:
+            return "Kutch", "Gujarat"
+        if abs(lat - 28.6139) < 0.1 and abs(lon - 77.2090) < 0.1:
+            return "Central Delhi", "Delhi"
+        if abs(lat - 19.0760) < 0.1 and abs(lon - 72.8777) < 0.1:
+            return "Mumbai City", "Maharashtra"
+        return None, None
+
+    monkeypatch.setattr("app.geo.resolve_district_online", mock_resolve)
+
+    # Inside Gujarat
+    assert is_in_gujarat(23.0225, 72.5714) is True
+    assert district_for(23.0225, 72.5714) == "Ahmedabad"
+
+    assert is_in_gujarat(21.1702, 72.8311) is True
+    assert district_for(21.1702, 72.8311) == "Surat"
+
+    assert is_in_gujarat(23.2420, 69.6669) is True
+    assert district_for(23.2420, 69.6669) == "Kutch"
+
+    # Outside Gujarat
+    assert is_in_gujarat(28.6139, 77.2090) is False  # Delhi
+    assert district_for(28.6139, 77.2090) is None
+
+    assert is_in_gujarat(19.0760, 72.8777) is False  # Mumbai
+    assert district_for(19.0760, 72.8777) is None
+
+
+def test_dynamic_geocoder_osm_fallback(monkeypatch):
+    """Verify OpenStreetMap reverse geocoder parses live dynamic district response."""
+    import json
+    from unittest.mock import MagicMock
+
+    from app.geo import resolve_district_online
+
+    # Simulate OpenStreetMap Nominatim response
+    fake_osm_response = json.dumps({
+        "address": {
+            "state_district": "Ahmedabad District",
+            "state": "Gujarat",
+            "country": "India"
+        }
+    }).encode("utf-8")
+
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = json.loads(fake_osm_response)
+
+    monkeypatch.setattr("app.geo.httpx.get", lambda *args, **kwargs: mock_resp)
+
+    district, state = resolve_district_online(23.0225, 72.5714)
+    assert district == "Ahmedabad"
+    assert state == "Gujarat"
+
+
+def test_dynamic_geocoder_google_maps(monkeypatch):
+    """Verify Google Maps geocoder parses live dynamic district response."""
+    import json
+    from unittest.mock import MagicMock
+
+    from app.geo import resolve_district_online
+
+    fake_google_response = json.dumps({
+        "results": [
+            {
+                "address_components": [
+                    {"long_name": "Surat", "types": ["administrative_area_level_2", "political"]},
+                    {"long_name": "Gujarat", "types": ["administrative_area_level_1", "political"]},
+                    {"long_name": "India", "types": ["country", "political"]}
+                ]
+            }
+        ]
+    }).encode("utf-8")
+
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = json.loads(fake_google_response)
+
+    monkeypatch.setattr("app.geo.httpx.get", lambda *args, **kwargs: mock_resp)
+
+    # Mock settings with google_maps_api_key
+    from app import config
+    orig_settings = config.get_settings()
+    mock_settings = MagicMock(wraps=orig_settings)
+    mock_settings.google_maps_api_key = "fake_test_key"
+    monkeypatch.setattr("app.geo.get_settings", lambda: mock_settings)
+
+    district, state = resolve_district_online(21.1702, 72.8311)
+    assert district == "Surat"
+    assert state == "Gujarat"

@@ -22,11 +22,15 @@ if _REPO_ENV.is_file():
 class ConfigError(RuntimeError):
     pass
 
-
 def _int(name: str, default: int) -> int:
     raw = os.getenv(name)
     return int(raw) if raw else default
 
+def _bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ("true", "1", "yes", "on")
 
 @dataclass(frozen=True)
 class Settings:
@@ -41,13 +45,17 @@ class Settings:
     lockout_minutes: int
     dispatch_ack_timeout_minutes: int
     ai_low_confidence_threshold: float
+    google_maps_api_key: str | None
+    boundary_sync_enabled: bool
+    boundary_sync_interval_hours: int
+    boundary_sync_check_interval_seconds: int
+    geojson_gujarat_districts_url: str
 
     def require(self, name: str) -> str:
         value = getattr(self, name)
         if not value:
             raise ConfigError(f"{name.upper()} is not configured")
         return value
-
 
 @lru_cache
 def get_settings() -> Settings:
@@ -69,4 +77,12 @@ def get_settings() -> Settings:
         lockout_minutes=_int("LOGIN_LOCKOUT_MINUTES", 15),
         dispatch_ack_timeout_minutes=_int("DISPATCH_ACK_TIMEOUT_MINUTES", 15),
         ai_low_confidence_threshold=float(os.getenv("AI_LOW_CONFIDENCE_THRESHOLD", "0.6")),
+        google_maps_api_key=os.getenv("GOOGLE_MAPS_API_KEY") or os.getenv("GOOGLE_GEOCODING_API_KEY"),
+        boundary_sync_enabled=_bool("BOUNDARY_SYNC_ENABLED", True),
+        boundary_sync_interval_hours=_int("BOUNDARY_SYNC_INTERVAL_HOURS", 720),  # Monthly (30 days = 720h)
+        boundary_sync_check_interval_seconds=_int("BOUNDARY_SYNC_CHECK_INTERVAL_SECONDS", 86400),
+        geojson_gujarat_districts_url=os.getenv(
+            "GEOJSON_GUJARAT_DISTRICTS_URL",
+            "https://raw.githubusercontent.com/datameet/maps/master/Districts/Gujarat.geojson",
+        ),
     )
