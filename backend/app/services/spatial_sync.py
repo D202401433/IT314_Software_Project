@@ -11,11 +11,11 @@ from __future__ import annotations
 
 import json
 import logging
-import urllib.error
-import urllib.request
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
+
+import httpx
 
 from app import db
 from app.config import get_settings
@@ -66,21 +66,14 @@ def _check_upstream_headers(
     if last_modified:
         headers["If-Modified-Since"] = last_modified
 
-    req = urllib.request.Request(url, headers=headers, method="GET")
-
     try:
-        with urllib.request.urlopen(req, timeout=timeout_seconds) as resp:
-            content = resp.read()
-            new_etag = resp.headers.get("ETag")
-            new_last_modified = resp.headers.get("Last-Modified")
-            return True, new_etag, new_last_modified, content
-    except urllib.error.HTTPError as exc:
-        if exc.code == 304:
+        resp = httpx.get(url, headers=headers, timeout=timeout_seconds)
+        if resp.status_code == 304:
             logger.info("Upstream GIS resource %s unchanged (HTTP 304).", url)
             return False, etag, last_modified, None
-        logger.warning("Upstream GIS HTTP error %s for URL: %s", exc.code, url)
-        raise
-    except Exception as exc:
+        resp.raise_for_status()
+        return True, resp.headers.get("ETag"), resp.headers.get("Last-Modified"), resp.content
+    except httpx.HTTPError as exc:
         logger.warning("Upstream GIS request failed for %s: %s", url, exc)
         raise
 
@@ -151,7 +144,7 @@ def sync_boundary_source(
             is_modified, new_etag, new_last_mod, geojson_bytes = _check_upstream_headers(
                 source.url, curr_etag if not force else None, curr_last_mod if not force else None
             )
-        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        except (httpx.HTTPError, TimeoutError, OSError) as exc:
             logger.warning("Remote boundary fetch failed (%s). Retaining existing boundaries.", exc)
             return {"status": "skipped", "reason": f"remote_unavailable_{exc}", "source": source.key}
 

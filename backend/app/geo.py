@@ -13,9 +13,9 @@ from __future__ import annotations
 
 import json
 import logging
-import urllib.error
-import urllib.request
 from typing import Any
+
+import httpx
 
 from app.config import get_settings
 
@@ -33,43 +33,45 @@ def resolve_district_online(latitude: float, longitude: float) -> tuple[str | No
     # 1. Google Maps Geocoding API if key configured
     if settings.google_maps_api_key:
         try:
-            url = (
-                f"https://maps.googleapis.com/maps/api/geocode/json"
-                f"?latlng={latitude},{longitude}&key={settings.google_maps_api_key}"
+            resp = httpx.get(
+                "https://maps.googleapis.com/maps/api/geocode/json",
+                params={"latlng": f"{latitude},{longitude}", "key": settings.google_maps_api_key},
+                headers={"User-Agent": "ResQ-DisasterResponse/1.0"},
+                timeout=5,
             )
-            req = urllib.request.Request(url, headers={"User-Agent": "ResQ-DisasterResponse/1.0"})
-            with urllib.request.urlopen(req, timeout=5) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                for result in data.get("results", []):
-                    district = None
-                    state = None
-                    for comp in result.get("address_components", []):
-                        types = comp.get("types", [])
-                        if "administrative_area_level_2" in types:
-                            district = comp.get("long_name")
-                        elif "administrative_area_level_1" in types:
-                            state = comp.get("long_name")
-                    if district:
-                        return district.strip(), state or "Gujarat"
-        except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError, KeyError) as exc:
+            resp.raise_for_status()
+            data = resp.json()
+            for result in data.get("results", []):
+                district = None
+                state = None
+                for comp in result.get("address_components", []):
+                    types = comp.get("types", [])
+                    if "administrative_area_level_2" in types:
+                        district = comp.get("long_name")
+                    elif "administrative_area_level_1" in types:
+                        state = comp.get("long_name")
+                if district:
+                    return district.strip(), state or "Gujarat"
+        except (httpx.HTTPError, TimeoutError, OSError, json.JSONDecodeError, KeyError) as exc:
             logger.warning("Google Maps Geocoding request failed: %s", exc)
 
     # 2. OpenStreetMap Nominatim (Free, authoritative reverse geocoding)
     try:
-        url = f"https://nominatim.openstreetmap.org/reverse?lat={latitude}&lon={longitude}&format=json"
-        req = urllib.request.Request(
-            url,
+        resp = httpx.get(
+            "https://nominatim.openstreetmap.org/reverse",
+            params={"lat": latitude, "lon": longitude, "format": "json"},
             headers={"User-Agent": "ResQ-DisasterResponse/1.0 (Emergency Response Center)"},
+            timeout=5,
         )
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            addr = data.get("address", {})
-            district = addr.get("state_district") or addr.get("county") or addr.get("city")
-            state = addr.get("state")
-            if district:
-                clean_district = district.replace(" District", "").strip()
-                return clean_district, state or "Gujarat"
-    except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError, KeyError) as exc:
+        resp.raise_for_status()
+        data = resp.json()
+        addr = data.get("address", {})
+        district = addr.get("state_district") or addr.get("county") or addr.get("city")
+        state = addr.get("state")
+        if district:
+            clean_district = district.replace(" District", "").strip()
+            return clean_district, state or "Gujarat"
+    except (httpx.HTTPError, TimeoutError, OSError, json.JSONDecodeError, KeyError) as exc:
         logger.debug("OpenStreetMap Nominatim reverse geocoding failed: %s", exc)
 
     return None, None

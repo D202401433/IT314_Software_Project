@@ -136,10 +136,9 @@ def test_dynamic_geocoder_osm_fallback(monkeypatch):
     }).encode("utf-8")
 
     mock_resp = MagicMock()
-    mock_resp.read.return_value = fake_osm_response
-    mock_resp.__enter__.return_value = mock_resp
+    mock_resp.json.return_value = json.loads(fake_osm_response)
 
-    monkeypatch.setattr("urllib.request.urlopen", lambda req, timeout=5: mock_resp)
+    monkeypatch.setattr("app.geo.httpx.get", lambda *args, **kwargs: mock_resp)
 
     district, state = resolve_district_online(23.0225, 72.5714)
     assert district == "Ahmedabad"
@@ -166,10 +165,9 @@ def test_dynamic_geocoder_google_maps(monkeypatch):
     }).encode("utf-8")
 
     mock_resp = MagicMock()
-    mock_resp.read.return_value = fake_google_response
-    mock_resp.__enter__.return_value = mock_resp
+    mock_resp.json.return_value = json.loads(fake_google_response)
 
-    monkeypatch.setattr("urllib.request.urlopen", lambda req, timeout=5: mock_resp)
+    monkeypatch.setattr("app.geo.httpx.get", lambda *args, **kwargs: mock_resp)
 
     # Mock settings with google_maps_api_key
     from app import config
@@ -181,4 +179,3 @@ def test_dynamic_geocoder_google_maps(monkeypatch):
     district, state = resolve_district_online(21.1702, 72.8311)
     assert district == "Surat"
     assert state == "Gujarat"
-
