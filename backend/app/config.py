@@ -37,6 +37,7 @@ class Settings:
     database_url: str | None
     jwt_secret: str | None
     mfa_encryption_key: str | None
+    demo_mode: bool
     ai_triage_url: str | None
     access_token_minutes: int
     mfa_token_minutes: int
@@ -58,10 +59,17 @@ class Settings:
 
 @lru_cache
 def get_settings() -> Settings:
+    database_url = os.getenv("DATABASE_URL")
+    demo_mode = os.getenv("DEMO_MODE", "").strip().lower() in {"1", "true", "yes", "on"}
     return Settings(
-        database_url=os.getenv("DATABASE_URL"),
-        jwt_secret=os.getenv("JWT_SECRET"),
+        database_url=database_url,
+        jwt_secret=os.getenv("JWT_SECRET") or (
+            "drch_demo_only_jwt_secret_change_before_deployment_32chars"
+            if demo_mode and not database_url
+            else None
+        ),
         mfa_encryption_key=os.getenv("MFA_ENCRYPTION_KEY"),
+        demo_mode=demo_mode,
         ai_triage_url=os.getenv("AI_TRIAGE_URL") or None,
         access_token_minutes=_int("ACCESS_TOKEN_MINUTES", 60),
         mfa_token_minutes=_int("MFA_TOKEN_MINUTES", 5),

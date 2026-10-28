@@ -43,6 +43,21 @@ def _unauthenticated() -> ApiError:
 def load_principal(
     user_id: uuid.UUID, token_version: int, mfa: bool, ip: str | None = None
 ) -> Principal | None:
+    from app.config import get_settings
+    settings = get_settings()
+    if not settings.database_url:
+        demo_user_id = uuid.UUID("a0000000-0000-0000-0000-000000000001")
+        if not settings.demo_mode or user_id != demo_user_id or token_version != 1:
+            return None
+        return Principal(
+            user_id=demo_user_id,
+            email="commander@resq.gov.in",
+            full_name="Incident Commander (Demo)",
+            role=DM_ROLE,
+            mfa_verified=mfa,
+            permissions=frozenset(PERMISSIONS),
+            ip=ip,
+        )
     with db.transaction() as conn:
         row = conn.execute(
             """

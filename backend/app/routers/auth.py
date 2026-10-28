@@ -109,15 +109,86 @@ def _complete_login(conn, account, ip: str | None, mfa: bool) -> dict:
     return {
         "mfa_required": False,
         "access_token": token,
+        "token": token,
         "token_type": "bearer",
         "expires_in": settings.access_token_minutes * 60,
         "role": account["role"],
+        "user": {
+            "id": str(account["user_id"]),
+            "email": account["email"],
+            "name": account["full_name"],
+            "role": account["role"],
+        },
     }
+
+
+class SignupRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
+    password: str = Field(min_length=6, max_length=1024)
+    full_name: str = Field(min_length=1, max_length=120)
+    phone: str | None = Field(default=None, max_length=32)
+
+
+@router.post("/auth/signup", status_code=201)
+def signup(body: SignupRequest, request: Request):
+    ip = _ip(request)
+    email = body.email.strip().lower()
+    with db.transaction() as conn:
+        existing = conn.execute("SELECT 1 FROM users WHERE email = %s::citext", (email,)).fetchone()
+        if existing:
+            raise ApiError(409, "EMAIL_TAKEN", f"An account with email {email} already exists")
+
+        user_id = conn.execute(
+            """
+            INSERT INTO users (role_id, email, full_name, phone, status)
+            SELECT role_id, %s, %s, %s, 'ACTIVE' FROM roles WHERE code = 'NORMAL_USER'
+            RETURNING user_id
+            """,
+            (email, body.full_name.strip(), body.phone.strip() if body.phone else None),
+        ).fetchone()["user_id"]
+
+        password_hash = security.hash_password(body.password)
+        conn.execute(
+            "INSERT INTO user_auth (user_id, password_hash, mfa_enabled, mfa_secret) VALUES (%s, %s, FALSE, NULL)",
+            (user_id, password_hash),
+        )
+
+        audit.record(
+            conn,
+            actor=None,
+            action="CITIZEN_REGISTERED",
+            entity_type="user",
+            entity_id=user_id,
+            result="SUCCESS",
+            ip=ip,
+        )
+
+        account = _load_account(conn, user_id=user_id)
+        return _complete_login(conn, account, ip, mfa=False)
 
 
 @router.post("/auth/login")
 def login(body: LoginRequest, request: Request):
     ip = _ip(request)
+    email = body.email.strip().lower()
+
+    settings = get_settings()
+    if not settings.database_url:
+        if not settings.demo_mode:
+            settings.require("database_url")
+        # Development / demo fallback when database is not configured
+        if email == "commander@resq.gov.in" and body.password in ("admin123password", "admin123"):
+            token = security.issue_token(
+                uuid.UUID("a0000000-0000-0000-0000-000000000001"),
+                1,
+                security.MFA,
+                get_settings().mfa_token_minutes,
+            )
+            return {"mfa_required": True, "mfa_token": token}
+
+        security.verify_password(None, body.password)  # equalise timing
+        raise ApiError(401, "INVALID_CREDENTIALS", _GENERIC)
+
     with db.transaction() as conn:
         account = _load_account(conn, email=body.email.strip())
         if account is None:
@@ -154,6 +225,39 @@ def verify_mfa(body: MfaVerifyRequest, request: Request):
     claims = security.decode_token(body.mfa_token, security.MFA)
     if claims is None:
         raise ApiError(401, "MFA_CHALLENGE_INVALID", "The sign-in challenge expired. Sign in again.")
+
+    settings = get_settings()
+    if not settings.database_url:
+        if not settings.demo_mode:
+            settings.require("database_url")
+        if (
+            claims["sub"] == "a0000000-0000-0000-0000-000000000001"
+            and claims["tv"] == 1
+            and body.code in ("123456", "000000")
+        ):
+            token = security.issue_token(
+                uuid.UUID(claims["sub"]),
+                claims["tv"],
+                security.ACCESS,
+                get_settings().access_token_minutes,
+                mfa=True,
+            )
+            return {
+                "mfa_required": False,
+                "access_token": token,
+                "token": token,
+                "token_type": "bearer",
+                "expires_in": get_settings().access_token_minutes * 60,
+                "role": "DISASTER_MGMT",
+                "user": {
+                    "id": claims["sub"],
+                    "email": "commander@resq.gov.in",
+                    "name": "Incident Commander",
+                    "role": "DISASTER_MGMT",
+                },
+            }
+        raise ApiError(401, "MFA_INVALID", "The verification code is not valid")
+
     with db.transaction() as conn:
         account = _load_account(conn, user_id=uuid.UUID(claims["sub"]))
         if (
@@ -172,6 +276,8 @@ def verify_mfa(body: MfaVerifyRequest, request: Request):
 
 @router.post("/auth/logout", status_code=204)
 def logout(principal: CurrentUser):
+    if not get_settings().database_url:
+        return
     # Bumping token_version revokes every token issued to this user.
     with db.transaction() as conn:
         conn.execute(
@@ -189,6 +295,7 @@ def logout(principal: CurrentUser):
 
 
 @router.get("/me")
+@router.get("/auth/me")
 def me(principal: CurrentUser):
     return {
         "user_id": principal.user_id,
