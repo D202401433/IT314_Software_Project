@@ -84,10 +84,12 @@ jobs:
           cache: 'npm'
           cache-dependency-path: './frontend/package-lock.json'
 
-      - name: Cache Next.js build cache
+      - name: Cache Next.js build cache and ESLint cache
         uses: actions/cache@v4
         with:
-          path: ./frontend/.next/cache
+          path: |
+            ./frontend/.next/cache
+            ./frontend/.eslintcache
           key: ${{ runner.os }}-nextjs-${{ hashFiles('**/frontend/package-lock.json') }}-${{ hashFiles('**/frontend/src/**') }}
           restore-keys: |
             ${{ runner.os }}-nextjs-${{ hashFiles('**/frontend/package-lock.json') }}-
@@ -96,7 +98,7 @@ jobs:
         run: npm ci --legacy-peer-deps
 
       - name: Run ESLint
-        run: npm run lint
+        run: npm run lint -- --cache --cache-location .eslintcache
 
       - name: Verify Next.js production build
         run: npm run build
@@ -125,11 +127,19 @@ jobs:
         with:
           python-version: '3.12'
           cache: 'pip'
+          cache-dependency-path: |
+            backend/requirements.txt
+            ai-workers/requirements.txt
+
+      - name: Cache Ruff cache
+        uses: actions/cache@v4
+        with:
+          path: .ruff_cache
+          key: ${{ runner.os }}-ruff-${{ hashFiles('backend/**', 'ai-workers/**') }}
+          restore-keys: ${{ runner.os }}-ruff-
 
       - name: Install code quality and security tools
-        run: |
-          python -m pip install --upgrade pip
-          pip install ruff bandit pip-audit
+        run: pip install ruff bandit pip-audit
 
       - name: Run Ruff linter
         run: ruff check backend/ ai-workers/ --no-fix
@@ -241,9 +251,7 @@ jobs:
       - name: Install dependencies
         working-directory: ./backend
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest httpx pytest-asyncio
+          pip install -r requirements.txt pytest httpx pytest-asyncio
 
       - name: Run test suite with pytest & DB test execution guard
         working-directory: ./backend
@@ -319,8 +327,17 @@ jobs:
           file: ${{ matrix.file }}
           load: true
           tags: ${{ matrix.image_name }}:test
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+      - name: Cache Trivy Vulnerability Database
+        if: steps.check.outputs.should_run == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/trivy
+          key: ${{ runner.os }}-trivy-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-trivy-
 
       - name: Run Trivy vulnerability scan
         if: steps.check.outputs.should_run == 'true'

@@ -93,8 +93,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
 
   # ============================================================================
   # 2. Build and Publish Backend Container to GHCR (Only if backend changed)
@@ -139,8 +139,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
 
   # ============================================================================
   # 3. Build and Publish AI Workers Container to GHCR (Only if ai-workers changed)
@@ -185,8 +185,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=ai-workers
+          cache-to: type=gha,mode=max,scope=ai-workers
 
   # ============================================================================
   # 4. Production Deployment: Trigger Respective Deployments
