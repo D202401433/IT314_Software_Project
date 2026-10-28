@@ -176,15 +176,41 @@ jobs:
             sleep 2
           done
 
-      - name: Apply schema migrations and baseline seeds
+      - name: Apply schema migrations and seeds with version tracking
         run: |
+          psql -h localhost -U postgres -d drch_test -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE TABLE IF NOT EXISTS schema_migrations (
+              version VARCHAR(255) PRIMARY KEY,
+              applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+          );
+          SQL
+
+          echo "Checking and applying migrations in version order..."
           for file in $(find backend/db/migrations -maxdepth 1 -name '*.sql' | sort -V); do
-            echo "Applying migration: $file"
-            psql -h localhost -U postgres -d drch_test -f "$file" -v ON_ERROR_STOP=1
+            version=$(basename "$file")
+            already=$(psql -h localhost -U postgres -d drch_test -t -A -c "SELECT 1 FROM schema_migrations WHERE version = '$version';")
+            if [ "$already" = "1" ]; then
+              echo "  [SKIP] Migration already applied: $version"
+            else
+              echo "  [APPLY] Migration: $version"
+              psql -h localhost -U postgres -d drch_test -f "$file" -v ON_ERROR_STOP=1
+              psql -h localhost -U postgres -d drch_test -c "INSERT INTO schema_migrations (version) VALUES ('$version');"
+            fi
           done
-          echo "Applying baseline seed data..."
-          psql -h localhost -U postgres -d drch_test -f backend/db/seeds/seed_data.sql -v ON_ERROR_STOP=1
-          echo "All migrations and seeds applied successfully."
+
+          echo "Checking and applying seeds in version order..."
+          for seed in $(find backend/db/seeds -maxdepth 1 -name '*.sql' | sort -V); do
+            version=$(basename "$seed")
+            already=$(psql -h localhost -U postgres -d drch_test -t -A -c "SELECT 1 FROM schema_migrations WHERE version = '$version';")
+            if [ "$already" = "1" ]; then
+              echo "  [SKIP] Seed already applied: $version"
+            else
+              echo "  [APPLY] Seed: $version"
+              psql -h localhost -U postgres -d drch_test -f "$seed" -v ON_ERROR_STOP=1
+              psql -h localhost -U postgres -d drch_test -c "INSERT INTO schema_migrations (version) VALUES ('$version');"
+            fi
+          done
+          echo "All migrations and seeds evaluated successfully."
 
       - name: Verify audit log cryptographic hash trigger
         run: |
@@ -220,15 +246,26 @@ jobs:
           pip install -r requirements.txt
           pip install pytest httpx pytest-asyncio
 
-      - name: Run test suite with pytest
+      - name: Run test suite with pytest & DB test execution guard
         working-directory: ./backend
+        env:
+          REQUIRE_DB_TESTS: "1"
         run: |
-          if [ -d "tests" ] && [ "$(find tests -name 'test_*.py' | head -1)" ]; then
-            python -m pytest tests/ -v --tb=short
-          else
-            echo "No test suite found in backend/tests/ — running smoke test"
-            python -c "from main import app; print('FastAPI app imports successfully')"
-          fi
+          python -m pytest tests/ -v --tb=short
+
+      - name: Execute Core Loop Smoke Test
+        working-directory: .
+        env:
+          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/drch_test"
+          JWT_SECRET: "ci_pipeline_jwt_secret_token_minimum_32_characters_key"
+        run: |
+          cd backend
+          python -m uvicorn main:app --host 0.0.0.0 --port 8000 &
+          SERVER_PID=$!
+          cd ..
+          sleep 4
+          python scripts/smoke.py --base-url http://localhost:8000
+          kill $SERVER_PID || true
 
   # ============================================================================
   # 4. Container Build Validation (Matrix on Changed Components Only)
@@ -356,4 +393,12 @@ jobs:
           npm install -g vercel@latest
           echo "Deploying preview to Vercel..."
           PREVIEW_URL=$(vercel deploy --token="$VERCEL_TOKEN" --yes)
-          echo "🚀 Vercel preview successfully deployed to: $PREVIEW_URL"
+          if [ -z "$PREVIEW_URL" ]; then
+            echo "::error::Vercel did not return a preview URL."
+            exit 1
+          fi
+          echo "Vercel preview successfully deployed to: $PREVIEW_URL"
+          {
+            echo "## Vercel Preview"
+            echo "$PREVIEW_URL"
+          } >> "$GITHUB_STEP_SUMMARY"
