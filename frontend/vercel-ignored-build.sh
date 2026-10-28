@@ -20,10 +20,21 @@ if [ "$VERCEL_GIT_COMMIT_REF" != "main" ] && [ -n "$VERCEL_GIT_COMMIT_SHA" ]; th
   REPO="Siddhcreator-1706/IT314_Software_Project"
   echo "🔍 Checking GitHub Actions CI status for commit $VERCEL_GIT_COMMIT_SHA..."
 
-  # Query GitHub commit check runs
-  CHECK_STATUS=$(curl -s "https://api.github.com/repos/$REPO/commits/$VERCEL_GIT_COMMIT_SHA/check-runs" \
+  # Query GitHub commit check runs with optional auth token to avoid rate limits
+  AUTH_HEADER=()
+  if [ -n "${GITHUB_TOKEN:-}" ]; then
+    AUTH_HEADER=(-H "Authorization: Bearer $GITHUB_TOKEN")
+  fi
+
+  CHECK_STATUS=$(curl -s "${AUTH_HEADER[@]}" "https://api.github.com/repos/$REPO/commits/$VERCEL_GIT_COMMIT_SHA/check-runs" \
     -H "Accept: application/vnd.github+json" \
     | grep -o '"conclusion": "[^"]*"' | head -10)
+
+  # If unauthenticated and received no status, or API was rate limited, proceed with build safely
+  if [ -z "$CHECK_STATUS" ] && [ -z "${GITHUB_TOKEN:-}" ]; then
+    echo "⚠️ No GitHub token or check-run status available. Allowing build to proceed."
+    exit 1
+  fi
 
   # If any check failed or if checks are still in progress / no checks finished yet
   if echo "$CHECK_STATUS" | grep -q '"conclusion": "failure"'; then

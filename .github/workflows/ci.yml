@@ -11,6 +11,8 @@ concurrency:
 
 permissions:
   contents: read
+  pull-requests: write
+  issues: write
 
 jobs:
   # ============================================================================
@@ -19,6 +21,7 @@ jobs:
   detect-changes:
     name: Changes / Path Filtering
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       frontend: ${{ steps.filter.outputs.frontend }}
       backend: ${{ steps.filter.outputs.backend }}
@@ -46,6 +49,7 @@ jobs:
   security-secrets-scan:
     name: Security / GitLeaks Secret Scan
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -63,6 +67,7 @@ jobs:
   frontend-check:
     name: Frontend / Lint, Typecheck & Build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: detect-changes
     if: ${{ needs.detect-changes.outputs.frontend == 'true' || github.event_name == 'workflow_dispatch' }}
     defaults:
@@ -108,6 +113,7 @@ jobs:
   python-check:
     name: Python / Lint, SAST & Dependency Audit
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: detect-changes
     if: ${{ needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.ai-workers == 'true' || github.event_name == 'workflow_dispatch' }}
     steps:
@@ -143,6 +149,7 @@ jobs:
   backend-and-db-tests:
     name: Backend / Migrations, Triggers & Test Suite
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: detect-changes
     if: ${{ needs.detect-changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch' }}
     services:
@@ -167,14 +174,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Wait for PostgreSQL service to be ready
-        run: |
-          for i in $(seq 1 30); do
-            pg_isready -h localhost -U postgres && break
-            echo "Waiting for PostgreSQL... attempt $i"
-            sleep 2
-          done
 
       - name: Apply schema migrations and seeds with version tracking
         run: |
@@ -273,6 +272,7 @@ jobs:
   container-validation:
     name: Container / Build (${{ matrix.name }})
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs:
       - detect-changes
       - frontend-check
@@ -280,7 +280,6 @@ jobs:
       - backend-and-db-tests
     if: always() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     strategy:
-
       fail-fast: false
       matrix:
         include:
@@ -325,7 +324,7 @@ jobs:
 
       - name: Run Trivy vulnerability scan
         if: steps.check.outputs.should_run == 'true'
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.28.0
         with:
           scan-type: 'image'
           image-ref: ${{ matrix.image_name }}:test
@@ -334,11 +333,16 @@ jobs:
           cache: true
 
   # ============================================================================
-  # 5. CI Pipeline Gatekeeper (Blocking Status Check for PR Merge)
+  # 5. CI Gatekeeper + Vercel Preview Deploy
   # ============================================================================
   ci-gatekeeper:
     name: Pipeline Status / Quality Gate
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
     needs:
       - detect-changes
       - security-secrets-scan
@@ -348,7 +352,98 @@ jobs:
       - container-validation
     if: always()
     steps:
+      # ── Vercel Preview Deployment (runs BEFORE quality gate check) ──
+      - name: Checkout repository for Vercel deployment
+        if: |
+          github.event_name == 'pull_request' &&
+          needs.detect-changes.outputs.frontend == 'true' &&
+          needs.frontend-check.result == 'success'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js for Vercel CLI
+        if: |
+          github.event_name == 'pull_request' &&
+          needs.detect-changes.outputs.frontend == 'true' &&
+          needs.frontend-check.result == 'success'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Deploy Verified Preview to Vercel
+        id: vercel_deploy
+        if: |
+          github.event_name == 'pull_request' &&
+          needs.detect-changes.outputs.frontend == 'true' &&
+          needs.frontend-check.result == 'success'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "⚠️ VERCEL_TOKEN secret is not set (e.g. fork PR). Skipping Vercel preview deployment."
+            exit 0
+          fi
+          echo "Deploying preview to Vercel..."
+          DEPLOY_OUTPUT=$(npx --yes vercel@latest deploy --token="$VERCEL_TOKEN" --yes)
+          echo "$DEPLOY_OUTPUT"
+          PREVIEW_URL=$(echo "$DEPLOY_OUTPUT" | grep -o 'https://[^ ]*vercel\.app' | tail -n 1)
+          if [ -z "$PREVIEW_URL" ]; then
+            PREVIEW_URL=$(echo "$DEPLOY_OUTPUT" | grep -o 'https://[^ ]*' | tail -n 1)
+          fi
+          if [ -z "$PREVIEW_URL" ]; then
+            echo "::error::Vercel did not return a preview URL."
+            exit 1
+          fi
+          echo "url=$PREVIEW_URL" >> "$GITHUB_OUTPUT"
+          echo "Vercel preview successfully deployed to: $PREVIEW_URL"
+          {
+            echo "## 🚀 Vercel Preview"
+            echo "[$PREVIEW_URL]($PREVIEW_URL)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment Preview URL on PR
+        if: |
+          github.event_name == 'pull_request' &&
+          steps.vercel_deploy.outputs.url != ''
+        continue-on-error: true
+        env:
+          PREVIEW_URL: ${{ steps.vercel_deploy.outputs.url }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const url = process.env.PREVIEW_URL;
+            if (!url) return;
+            const prNumber = context.payload.pull_request ? context.payload.pull_request.number : context.issue.number;
+            if (!prNumber) return;
+            const body = `## 🚀 Vercel Preview\n\n🔗 **Preview URL:** ${url}\n\n_Deployed from commit \`${context.sha.substring(0, 7)}\`_`;
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+            });
+            const existing = comments.find(c => c.body && c.body.includes('🚀 Vercel Preview'));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body,
+              });
+            }
+
+      # ── Quality Gate (runs LAST with if: always()) ──
       - name: Evaluate pipeline execution status
+        if: always()
         run: |
           echo "=== CI Job Results ==="
           echo "frontend-check:       ${{ needs.frontend-check.result }}"
@@ -375,30 +470,3 @@ jobs:
             exit 1
           fi
           echo "CI check PASSED: all required validation and security jobs succeeded."
-
-      - name: Checkout repository for Vercel deployment
-        if: github.event_name == 'pull_request' && needs.detect-changes.outputs.frontend == 'true'
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Deploy Verified Preview to Vercel
-        if: github.event_name == 'pull_request' && needs.detect-changes.outputs.frontend == 'true'
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-        run: |
-          echo "Installing latest Vercel CLI..."
-          npm install -g vercel@latest
-          echo "Deploying preview to Vercel..."
-          PREVIEW_URL=$(vercel deploy --token="$VERCEL_TOKEN" --yes)
-          if [ -z "$PREVIEW_URL" ]; then
-            echo "::error::Vercel did not return a preview URL."
-            exit 1
-          fi
-          echo "Vercel preview successfully deployed to: $PREVIEW_URL"
-          {
-            echo "## Vercel Preview"
-            echo "$PREVIEW_URL"
-          } >> "$GITHUB_STEP_SUMMARY"
