@@ -341,7 +341,7 @@ jobs:
 
       - name: Run Trivy vulnerability scan
         if: steps.check.outputs.should_run == 'true'
-        uses: aquasecurity/trivy-action@v0.28.0
+        uses: aquasecurity/trivy-action@master
         with:
           scan-type: 'image'
           image-ref: ${{ matrix.image_name }}:test
