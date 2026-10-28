@@ -19,7 +19,6 @@ SUPPORTED = {"CYCLONE", "INDUSTRIAL_FIRE", "URBAN_FLOODING"}
 PRIORITIES = {"CRITICAL", "HIGH", "MEDIUM", "LOW"}
 TIMEOUT_SECONDS = 10
 
-
 @dataclass
 class TriageOutcome:
     status: str  # ai_rec_status: GENERATED | LOW_CONFIDENCE | UNAVAILABLE | UNSAFE_OUTPUT
@@ -30,12 +29,10 @@ class TriageOutcome:
     uncertainty_note: str | None = None
     factors: dict[str, Any] = field(default_factory=dict)
 
-
 class _Factor(BaseModel):
     name: str = Field(max_length=120)
     detail: str | None = Field(None, max_length=500)
     weight: float | None = Field(None, ge=-1, le=1)
-
 
 class _ProviderOutput(BaseModel):
     """The contract an external triage service must satisfy."""
@@ -47,13 +44,11 @@ class _ProviderOutput(BaseModel):
     uncertainty: str | None = Field(None, max_length=1000)
     factors: list[_Factor] = Field(default_factory=list, max_length=20)
 
-
 class TriageProvider:
     name = "none"
 
     def triage(self, payload: dict[str, Any]) -> TriageOutcome:
         raise NotImplementedError
-
 
 class UnavailableProvider(TriageProvider):
     name = "not-configured"
@@ -64,7 +59,6 @@ class UnavailableProvider(TriageProvider):
             model_name=self.name,
             uncertainty_note="No AI triage service is configured. Continue with manual triage.",
         )
-
 
 class HttpTriageProvider(TriageProvider):
     name = "http"
@@ -84,7 +78,6 @@ class HttpTriageProvider(TriageProvider):
                 uncertainty_note="The AI triage service did not respond. Continue with manual triage.",
             )
         return apply_guardrails(raw)
-
 
 def apply_guardrails(raw: Any) -> TriageOutcome:
     """Validate untrusted model output; anything malformed becomes UNSAFE_OUTPUT with no suggestion."""
@@ -113,7 +106,7 @@ def apply_guardrails(raw: Any) -> TriageOutcome:
         suggested_scenario = None
         factors["out_of_scope"] = True
         factors["raw_scenario"] = out.scenario[:60]
-        note = (note + " " if note else "") + "Suggested type is outside the three supported scenarios."
+        note = (note + " " if note else "") + "Suggested type is outside supported scenarios."
 
     low = out.confidence < get_settings().ai_low_confidence_threshold or suggested_scenario is None
     return TriageOutcome(
@@ -125,7 +118,6 @@ def apply_guardrails(raw: Any) -> TriageOutcome:
         uncertainty_note=note,
         factors=factors,
     )
-
 
 def get_provider() -> TriageProvider:
     url = get_settings().ai_triage_url

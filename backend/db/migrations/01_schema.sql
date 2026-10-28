@@ -26,9 +26,10 @@ CREATE EXTENSION IF NOT EXISTS citext;     -- case-insensitive emails & text
 -- ---------------------------------------------------------------------
 -- 0. ENUM TYPES (Domain Value Constraints)
 -- ---------------------------------------------------------------------
-CREATE TYPE role_code            AS ENUM ('NORMAL_USER', 'DISASTER_MGMT', 'APP_MGMT');
+CREATE TYPE role_code            AS ENUM ('NORMAL_USER', 'DISASTER_MGMT', 'APP_MGMT', 'FIELD_TEAM');
 CREATE TYPE account_status       AS ENUM ('ACTIVE', 'LOCKED', 'DISABLED', 'PENDING_VERIFICATION');
 CREATE TYPE scenario_type        AS ENUM ('CYCLONE', 'INDUSTRIAL_FIRE', 'URBAN_FLOODING');
+
 CREATE TYPE incident_status      AS ENUM ('SUBMITTED', 'NEEDS_INFORMATION', 'VERIFIED', 'DISPATCHED', 'RESOLVED', 'CLOSED', 'REJECTED');
 CREATE TYPE priority_level       AS ENUM ('CRITICAL', 'HIGH', 'MEDIUM', 'LOW');
 CREATE TYPE location_source      AS ENUM ('GPS', 'MAP_PIN', 'MANUAL');

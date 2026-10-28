@@ -11,23 +11,29 @@ from app.config import get_settings
 from app.errors import install_error_handlers
 from app.routers import auth
 from app.routers.dm import router as dm_router
-from app.services.dispatch import escalate_overdue
-from database import (
-    create_report,
-    get_public_alerts,
-    get_public_incidents,
-    get_report_by_id,
-    get_reports_by_user,
-    get_shelters,
-    init_database,
-)
-from models import (
+from app.schemas.citizen import (
     CreateReportRequest,
     PublicAlertResponse,
     PublicIncidentResponse,
     ReportResponse,
     ShelterResponse,
 )
+from app.services.dispatch import escalate_overdue
+
+try:
+    from database import (
+        create_report,
+        get_public_alerts,
+        get_public_incidents,
+        get_report_by_id,
+        get_reports_by_user,
+        get_shelters,
+        init_database,
+    )
+    _SQLITE_CITIZEN_AVAILABLE = True
+except ImportError:
+    _SQLITE_CITIZEN_AVAILABLE = False
+
 
 logger = logging.getLogger("drch.backend")
 logging.basicConfig(level=logging.INFO)
@@ -78,14 +84,44 @@ async def ai_workers_background_consumer():
         logger.info("AI Worker consumer stopped gracefully.")
 
 
+async def spatial_boundary_monthly_worker():
+    """
+    Monthly Background Spatial Boundary Worker:
+    Periodically checks if official boundary datasets or upstream GIS providers
+    have updated (ETag/Last-Modified check) and syncs changes into PostGIS without manual intervention.
+    """
+    settings = get_settings()
+    if not settings.boundary_sync_enabled:
+        return
+
+    logger.info("Initializing monthly spatial boundary synchronization worker...")
+    try:
+        # Initial check on startup after short warm-up delay
+        await asyncio.sleep(10)
+        while True:
+            if settings.database_url:
+                try:
+                    from app.services.spatial_sync import check_and_sync_all_sources
+                    await asyncio.to_thread(check_and_sync_all_sources)
+                except Exception:
+                    logger.exception("Spatial boundary sync check encountered error; will retry next interval")
+            await asyncio.sleep(settings.boundary_sync_check_interval_seconds)
+    except asyncio.CancelledError:
+        logger.info("Spatial boundary worker stopped gracefully.")
+
+
 # ═══════════════════════════════════════════════════════════════════
 # Application Lifespan (startup / shutdown)
 # ═══════════════════════════════════════════════════════════════════
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: initialize database and spawn worker task
-    init_database()
-    logger.info("SQLite citizen database initialized.")
+    # Startup: initialize optional demo database and spawn worker task
+    if _SQLITE_CITIZEN_AVAILABLE:
+        try:
+            init_database()
+            logger.info("SQLite citizen demo database initialized.")
+        except Exception:  # noqa: BLE001
+            logger.warning("Could not initialize optional SQLite demo database.")
 
     # Startup: ensure database schema migrations are applied
     if get_settings().database_url:
@@ -95,16 +131,23 @@ async def lifespan(app: FastAPI):
         except Exception:
             logger.exception("Database migration failed on startup")
 
-    # Startup: spawn worker task in background
+    # Startup: spawn worker tasks in background
     worker_task = asyncio.create_task(ai_workers_background_consumer())
+    spatial_task = asyncio.create_task(spatial_boundary_monthly_worker())
     yield
-    # Shutdown: cancel worker task
+    # Shutdown: cancel worker tasks
     worker_task.cancel()
+    spatial_task.cancel()
     try:
         await worker_task
     except asyncio.CancelledError:
         pass
+    try:
+        await spatial_task
+    except asyncio.CancelledError:
+        pass
     db.close_pool()
+
 
 
 
@@ -173,6 +216,12 @@ async def submit_citizen_report(
             detail=f"Invalid disaster category. Must be one of: {', '.join(allowed_categories)}",
         )
 
+    if not _SQLITE_CITIZEN_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="Citizen reporting service is currently unavailable.",
+        )
+
     try:
         report = create_report(
             user_id=citizen["user_id"],
@@ -198,6 +247,8 @@ async def list_citizen_reports(
     Reports are ordered by submission date (newest first).
     Ownership is enforced server-side using the authenticated user ID.
     """
+    if not _SQLITE_CITIZEN_AVAILABLE:
+        return []
     try:
         reports = get_reports_by_user(citizen["user_id"])
         return reports
@@ -219,6 +270,11 @@ async def get_citizen_report(
     Returns a single disaster report by ID.
     Only returns the report if it belongs to the authenticated citizen.
     """
+    if not _SQLITE_CITIZEN_AVAILABLE:
+        raise HTTPException(
+            status_code=404,
+            detail="Report not found or service is unavailable.",
+        )
     report = get_report_by_id(report_id, citizen["user_id"])
     if not report:
         raise HTTPException(
@@ -243,6 +299,8 @@ async def list_public_incidents():
     Used by the citizen compact map. Does not expose unverified reports,
     private responder data, or resolved/closed incidents.
     """
+    if not _SQLITE_CITIZEN_AVAILABLE:
+        return []
     return get_public_incidents()
 
 
@@ -256,6 +314,8 @@ async def list_public_alerts():
     Returns public safety alerts and warnings.
     Includes flood warnings, fire hazard notices, road closures, and IMD advisories.
     """
+    if not _SQLITE_CITIZEN_AVAILABLE:
+        return []
     return get_public_alerts()
 
 
@@ -269,6 +329,8 @@ async def list_shelters():
     Returns operational shelters, relief camps, and hospitals
     with capacity and contact information.
     """
+    if not _SQLITE_CITIZEN_AVAILABLE:
+        return []
     return get_shelters()
 
 

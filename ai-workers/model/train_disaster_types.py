@@ -1,7 +1,7 @@
 """Reusable model, dataset, preprocessing, and evaluation utilities.
 
-This module does not train a model when imported. Training is intentionally
-kept out of this file; use the existing checkpoint with check_model.ipynb.
+This module does not train a model when imported. Training utilities and
+evaluation helpers can be executed standalone or imported.
 """
 
 import csv
@@ -26,7 +26,7 @@ ROOT = Path(
         r"D:\Study\Python\Project\New folder\data_disaster_types\data_disaster_types",
     )
 )
-# Dataset TSV paths are part of the public module API used by check_model.ipynb.
+# Dataset TSV paths
 TRAIN_TSV = ROOT / "consolidated_disaster_types_train_final.tsv"
 DEV_TSV = ROOT / "consolidated_disaster_types_dev_final.tsv"
 TEST_TSV = ROOT / "consolidated_disaster_types_test_final.tsv"
