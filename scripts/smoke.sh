@@ -16,7 +16,7 @@ set -euo pipefail
 # ------------------------------------------------------------------------------
 # Configuration (Environment variables only; no defaults for secrets!)
 # ------------------------------------------------------------------------------
-SMOKE_BASE_URL="${SMOKE_BASE_URL:-http://localhost:8000}"
+SMOKE_BASE_URL="${SMOKE_BASE_URL:-${STAGING_URL:-http://localhost:8000}}"
 SMOKE_BASE_URL="${SMOKE_BASE_URL%/}"
 
 # Placeholder names until Siddh confirms real ones; fail fast if missing
@@ -31,6 +31,9 @@ SMOKE_SKIP_INCIDENT_SUBMIT="${SMOKE_SKIP_INCIDENT_SUBMIT:-${SMOKE_SKIP_STEP5:-0}
 SMOKE_SKIP_OUTSIDE_GUJARAT="${SMOKE_SKIP_OUTSIDE_GUJARAT:-${SMOKE_SKIP_STEP6:-0}}"
 SMOKE_SKIP_PUBLIC_UNVERIFIED="${SMOKE_SKIP_PUBLIC_UNVERIFIED:-${SMOKE_SKIP_STEP7:-0}}"
 SMOKE_SKIP_PUBLIC_VERIFIED="${SMOKE_SKIP_PUBLIC_VERIFIED:-${SMOKE_SKIP_STEP10:-0}}"
+
+# Cold-start retry limit in seconds (accommodates free Render container spin-up)
+SMOKE_COLD_START_TIMEOUT="${SMOKE_COLD_START_TIMEOUT:-90}"
 
 # Fail fast if required secrets or credentials are not provided
 if [[ -z "$SMOKE_STAFF_EMAIL" ]]; then
@@ -180,9 +183,66 @@ print(code)
 echo "Starting DRCH core loop smoke test against: $SMOKE_BASE_URL"
 
 # ==============================================================================
-# Step 1: GET /health and /health/ready
+# Step 1: GET /health and /health/ready (with Render Cold-Start Wait-and-Retry)
 # ==============================================================================
-step1_health_code=$(curl -s -o "$TMP_DIR/health.json" -w "%{http_code}" "$SMOKE_BASE_URL/health" || true)
+# Render's free tier spins down after inactivity. Waking the container and
+# connecting to the database can take 30 to 75+ seconds.
+# We implement a documented 90-second wait-and-retry loop against /health/ready
+# (with /api/v1/health and /health fallbacks) to log and measure cold-start time.
+# ==============================================================================
+echo "Step 1: Checking health & readiness (polling up to ${SMOKE_COLD_START_TIMEOUT}s for Render cold start)..."
+
+poll_start=$(date +%s)
+cold_start_elapsed=0
+server_ready=0
+last_code="000"
+
+while true; do
+    now=$(date +%s)
+    cold_start_elapsed=$((now - poll_start))
+
+    # Probe /health/ready
+    ready_code=$(curl -s -o "$TMP_DIR/ready.json" -w "%{http_code}" --connect-timeout 5 --max-time 15 "$SMOKE_BASE_URL/health/ready" || true)
+    last_code="$ready_code"
+
+    if [[ "$ready_code" == "200" ]]; then
+        server_ready=1
+        break
+    elif [[ "$ready_code" == "404" ]]; then
+        # Check /api/v1/health (liveness + database reachability probe per SRS s.15.6)
+        v1_code=$(curl -s -o "$TMP_DIR/ready.json" -w "%{http_code}" --connect-timeout 5 --max-time 15 "$SMOKE_BASE_URL/api/v1/health" || true)
+        if [[ "$v1_code" == "200" ]]; then
+            server_ready=1
+            break
+        elif [[ "$v1_code" != "404" && "$v1_code" != "000" ]]; then
+            last_code="$v1_code"
+        else
+            # Also check base /health
+            h_code=$(curl -s -o "$TMP_DIR/health.json" -w "%{http_code}" --connect-timeout 5 --max-time 15 "$SMOKE_BASE_URL/health" || true)
+            if [[ "$h_code" == "200" ]]; then
+                server_ready=1
+                break
+            fi
+            last_code="$h_code"
+        fi
+    fi
+
+    if [[ "$cold_start_elapsed" -ge "$SMOKE_COLD_START_TIMEOUT" ]]; then
+        break
+    fi
+
+    echo "  [Cold start polling] ${cold_start_elapsed}s elapsed (latest status: $last_code). Retrying in 3s..."
+    sleep 3
+done
+
+if [[ "$server_ready" -ne 1 ]]; then
+    FAIL "Step 1: GET /health and /health/ready" "Server did not become ready within ${SMOKE_COLD_START_TIMEOUT}s (last status: $last_code)"
+fi
+
+echo "  ✓ Cold start complete: service reached healthy state in ${cold_start_elapsed}s"
+
+# Verify /health explicitly
+step1_health_code=$(curl -s -o "$TMP_DIR/health.json" -w "%{http_code}" --connect-timeout 5 "$SMOKE_BASE_URL/health" || true)
 if [[ "$step1_health_code" != "200" ]]; then
     FAIL "Step 1: GET /health and /health/ready" "Expected HTTP 200 from /health but received $step1_health_code"
 fi
@@ -192,20 +252,7 @@ if [[ "$step1_health_status" != "healthy" ]]; then
     FAIL "Step 1: GET /health and /health/ready" "Expected .status == 'healthy' in /health response"
 fi
 
-step1_ready_code=$(curl -s -o "$TMP_DIR/ready.json" -w "%{http_code}" "$SMOKE_BASE_URL/health/ready" || true)
-if [[ "$step1_ready_code" == "200" ]]; then
-    PASS "Step 1: GET /health and /health/ready"
-elif [[ "$step1_ready_code" == "404" ]]; then
-    # Fallback to /api/v1/health (database reachability probe per SRS s.15.6)
-    step1_api_code=$(curl -s -o "$TMP_DIR/ready.json" -w "%{http_code}" "$SMOKE_BASE_URL/api/v1/health" || true)
-    if [[ "$step1_api_code" == "200" ]]; then
-        PASS "Step 1: GET /health and /health/ready"
-    else
-        FAIL "Step 1: GET /health and /health/ready" "Received $step1_ready_code on /health/ready and $step1_api_code on /api/v1/health"
-    fi
-else
-    FAIL "Step 1: GET /health and /health/ready" "Expected HTTP 200 from /health/ready but received $step1_ready_code"
-fi
+PASS "Step 1: GET /health and /health/ready (ready in ${cold_start_elapsed}s)"
 
 # ==============================================================================
 # Step 2: Register a citizen with a unique email; registering again returns 409
