@@ -8,7 +8,6 @@ Verifies the test factory fixtures:
 """
 
 import pyotp
-import pytest
 
 
 def test_citizen_user_can_authenticate(client, citizen_user):

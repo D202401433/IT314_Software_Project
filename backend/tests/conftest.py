@@ -80,9 +80,12 @@ def pytest_collection_modifyitems(config, items):
     db_marker = pytest.mark.db
     for item in items:
         # Auto-apply the 'db' marker to any test requesting DB-backed fixtures
-        if hasattr(item, "fixturenames") and any(f in DB_FIXTURE_NAMES for f in item.fixturenames):
-            if "db" not in item.keywords:
-                item.add_marker(db_marker)
+        if (
+            hasattr(item, "fixturenames")
+            and any(f in DB_FIXTURE_NAMES for f in item.fixturenames)
+            and "db" not in item.keywords
+        ):
+            item.add_marker(db_marker)
 
     if DB_AVAILABLE:
         _ensure_schema()
@@ -134,9 +137,7 @@ def evaluate_ci_guard(require_db: bool, db_tests_ran: bool) -> bool:
         True: Run is OK (guard inactive or at least one DB test executed).
         False: Guard is active and zero DB tests were executed.
     """
-    if require_db and not db_tests_ran:
-        return False
-    return True
+    return not (require_db and not db_tests_ran)
 
 
 def pytest_sessionfinish(session, exitstatus):
