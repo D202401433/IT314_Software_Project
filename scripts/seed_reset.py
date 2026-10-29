@@ -129,9 +129,41 @@ def clear_dynamic_data(conn):
     has_users = row[0] if isinstance(row, tuple) else (row and next(iter(row.values()), None))
     if has_users:
         uids_sql = ", ".join(f"'{u}'::uuid" for u in BOOTSTRAP_USER_IDS)
-        conn.execute(f"DELETE FROM staff_permissions WHERE user_id NOT IN ({uids_sql})")
-        conn.execute(f"DELETE FROM user_auth WHERE user_id NOT IN ({uids_sql})")
-        conn.execute(f"DELETE FROM users WHERE user_id NOT IN ({uids_sql})")
+        row_audit = conn.execute("SELECT to_regclass('public.audit_logs')").fetchone()
+        has_audit = row_audit[0] if isinstance(row_audit, tuple) else (row_audit and next(iter(row_audit.values()), None))
+        audit_not_exists = " AND NOT EXISTS (SELECT 1 FROM audit_logs a WHERE a.actor_id = u.user_id)" if has_audit else ""
+
+        conn.execute(
+            f"""
+            DELETE FROM staff_permissions sp
+            WHERE sp.user_id NOT IN ({uids_sql})
+              AND EXISTS (
+                  SELECT 1 FROM users u
+                  WHERE u.user_id = sp.user_id
+                    AND u.user_id NOT IN ({uids_sql})
+                    {audit_not_exists}
+              )
+            """
+        )
+        conn.execute(
+            f"""
+            DELETE FROM user_auth ua
+            WHERE ua.user_id NOT IN ({uids_sql})
+              AND EXISTS (
+                  SELECT 1 FROM users u
+                  WHERE u.user_id = ua.user_id
+                    AND u.user_id NOT IN ({uids_sql})
+                    {audit_not_exists}
+              )
+            """
+        )
+        conn.execute(
+            f"""
+            DELETE FROM users u
+            WHERE u.user_id NOT IN ({uids_sql})
+              {audit_not_exists}
+            """
+        )
 
 
 def fetch_row_counts(conn) -> dict[str, int]:
