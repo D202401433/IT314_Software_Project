@@ -297,7 +297,8 @@ def staff_user(make):
 @pytest.fixture
 def field_user(sql, make):
     has_role = sql.execute("SELECT 1 FROM roles WHERE code = 'FIELD_TEAM'").fetchone()
-    has_table = sql.execute("SELECT to_regclass('public.field_team_members')").fetchone()[0]
+    row = sql.execute("SELECT to_regclass('public.field_team_members') AS tbl").fetchone()
+    has_table = row and row["tbl"]
     if not has_role or not has_table:
         pytest.skip("field_team_members table or FIELD_TEAM role does not exist yet")
     return make.field_team_user()

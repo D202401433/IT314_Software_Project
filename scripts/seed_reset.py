@@ -118,26 +118,31 @@ def clear_dynamic_data(conn):
     existing = []
     for tbl in OPERATIONAL_TABLES:
         row = conn.execute("SELECT to_regclass(%s)", (f"public.{tbl}",)).fetchone()
-        if row and row[0]:
+        val = row[0] if isinstance(row, tuple) else (row and next(iter(row.values()), None))
+        if val:
             existing.append(tbl)
 
     if existing:
         conn.execute(f"TRUNCATE TABLE {', '.join(existing)} CASCADE;")
 
-    has_users = conn.execute("SELECT to_regclass('public.users')").fetchone()[0]
+    row = conn.execute("SELECT to_regclass('public.users')").fetchone()
+    has_users = row[0] if isinstance(row, tuple) else (row and next(iter(row.values()), None))
     if has_users:
-        conn.execute("DELETE FROM staff_permissions WHERE user_id NOT IN %s", (BOOTSTRAP_USER_IDS,))
-        conn.execute("DELETE FROM user_auth WHERE user_id NOT IN %s", (BOOTSTRAP_USER_IDS,))
-        conn.execute("DELETE FROM users WHERE user_id NOT IN %s", (BOOTSTRAP_USER_IDS,))
+        uids_sql = ", ".join(f"'{u}'::uuid" for u in BOOTSTRAP_USER_IDS)
+        conn.execute(f"DELETE FROM staff_permissions WHERE user_id NOT IN ({uids_sql})")
+        conn.execute(f"DELETE FROM user_auth WHERE user_id NOT IN ({uids_sql})")
+        conn.execute(f"DELETE FROM users WHERE user_id NOT IN ({uids_sql})")
 
 
 def fetch_row_counts(conn) -> dict[str, int]:
     """Query row counts for the primary tracked tables."""
     counts = {}
     for tbl in ("users", "incidents", "resources", "donation_campaigns"):
-        has_tbl = conn.execute("SELECT to_regclass(%s)", (f"public.{tbl}",)).fetchone()[0]
+        row = conn.execute("SELECT to_regclass(%s)", (f"public.{tbl}",)).fetchone()
+        has_tbl = row[0] if isinstance(row, tuple) else (row and next(iter(row.values()), None))
         if has_tbl:
-            counts[tbl] = conn.execute(f"SELECT COUNT(*) FROM {tbl}").fetchone()[0]
+            cnt_row = conn.execute(f"SELECT COUNT(*) FROM {tbl}").fetchone()
+            counts[tbl] = cnt_row[0] if isinstance(cnt_row, tuple) else next(iter(cnt_row.values()))
         else:
             counts[tbl] = 0
     return counts
