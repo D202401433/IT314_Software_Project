@@ -133,7 +133,7 @@ def test_seed_reset_lifecycle_and_idempotency(sql):
 
     # Seed operational rows must exist
     assert counts1["incidents"] == 4
-    assert counts1["resources"] == 8
+    assert counts1["resources"] == 14
     assert counts1["donation_campaigns"] == 3
 
     # Seed users must exist
